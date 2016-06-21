@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 #include "mongoc-stream-private.h"
 #include "mongoc-stream-mpi.h"
 #include "mongoc-trace.h"
@@ -27,13 +26,20 @@
 struct _mongoc_stream_mpi_t
 {
    mongoc_stream_t  vtable;
+   MPI_Comm* comm;
 };
 
 
 static BSON_INLINE int64_t
 get_expiration (int32_t timeout_msec)
 {
-  RETURN(0);
+   if (timeout_msec < 0) {
+      return -1;
+   } else if (timeout_msec == 0) {
+      return 0;
+   } else {
+      return (bson_get_monotonic_time () + ((int64_t)timeout_msec * 1000L));
+   }
 }
 
 
@@ -79,6 +85,21 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
                              size_t           min_bytes,
                              int32_t          timeout_msec)
 {
+  mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
+  int64_t expire_at;
+  ssize_t ret = 0;
+  ssize_t nread;
+
+  ENTRY;
+
+  BSON_ASSERT(mpi_stream);
+  BSON_ASSERT(mpi_stream->comm);
+  BSON_ASSERT(iovcnt == 1); // We can't handle more than one iovec at the moment
+
+  expire_at = get_expiration(timeout_msec);
+
+  nread = mongoc_mpi_recv(mpi_stream->comm, iov[0].iov_base, iov[0].iov_len, expire_at);
+
   RETURN(0);
 }
 
@@ -127,7 +148,7 @@ _mongoc_stream_mpi_check_closed (mongoc_stream_t *stream) /* IN */
  */
 
 mongoc_stream_t *
-mongoc_stream_mpi_new () /* IN */
+mongoc_stream_mpi_new (MPI_Comm* comm) /* IN */
 {
    mongoc_stream_mpi_t *stream;
 
@@ -142,6 +163,7 @@ mongoc_stream_mpi_new () /* IN */
    stream->vtable.setsockopt = _mongoc_stream_mpi_setsockopt;
    stream->vtable.check_closed = _mongoc_stream_mpi_check_closed;
    stream->vtable.poll = _mongoc_stream_mpi_poll;
+   stream->comm = comm;
 
    return (mongoc_stream_t *)stream;
 }

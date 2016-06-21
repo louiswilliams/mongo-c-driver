@@ -21,7 +21,10 @@
 # error "Only <mongoc.h> can be included directly."
 #endif
 
+#include <mpi.h>
+
 #include "mongoc-stream.h"
+#include "mongoc-mpi.h"
 
 
 BSON_BEGIN_DECLS
