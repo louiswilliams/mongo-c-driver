@@ -33,6 +33,7 @@ BSON_BEGIN_DECLS
 #define MONGOC_STREAM_BUFFERED 3
 #define MONGOC_STREAM_GRIDFS   4
 #define MONGOC_STREAM_TLS      5
+#define MONGOC_STREAM_MPI      6
 
 bool
 mongoc_stream_wait (mongoc_stream_t *stream,

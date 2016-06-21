@@ -89,6 +89,7 @@ INST_H_FILES = \
 	src/mongoc/mongoc-stream-file.h \
 	src/mongoc/mongoc-stream-gridfs.h \
 	src/mongoc/mongoc-stream-private.h \
+	src/mongoc/mongoc-stream-mpi.h \
 	src/mongoc/mongoc-stream-socket.h \
 	src/mongoc/mongoc-stream.h \
 	src/mongoc/mongoc-thread-private.h \
@@ -174,6 +175,7 @@ MONGOC_SOURCES_SHARED += \
 	src/mongoc/mongoc-stream-buffered.c \
 	src/mongoc/mongoc-stream-file.c \
 	src/mongoc/mongoc-stream-gridfs.c \
+	src/mongoc/mongoc-stream-mpi.c \
 	src/mongoc/mongoc-stream-socket.c \
 	src/mongoc/mongoc-topology.c \
 	src/mongoc/mongoc-topology-description.c \
