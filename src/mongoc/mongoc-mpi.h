@@ -55,6 +55,13 @@ ssize_t          mongoc_mpi_recv          (MPI_Comm              *comm,
                                            size_t                 buflen,
                                            int64_t                expire_at);
 
+ssize_t          mongoc_mpi_sendv         (MPI_Comm              *comm,
+                                           mongoc_iovec_t        *iov,
+                                           size_t                 iovcnt,
+                                           int64_t                expire_at);
+
+
+
 
 BSON_END_DECLS
 

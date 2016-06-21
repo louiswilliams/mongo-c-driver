@@ -110,7 +110,11 @@ _mongoc_stream_mpi_writev (mongoc_stream_t *stream,
                               size_t           iovcnt,
                               int32_t          timeout_msec)
 {
-  RETURN(0);
+   mongoc_stream_mpi_t *mpi_stream = (mongoc_stream_mpi_t *)stream;
+
+  BSON_ASSERT (iovcnt > 0);
+
+  return mongoc_mpi_sendv(mpi_stream->comm,iov,iovcnt,timeout_msec);
 }
 
 
