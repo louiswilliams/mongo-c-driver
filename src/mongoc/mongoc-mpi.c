@@ -75,27 +75,34 @@ ssize_t mongoc_mpi_sendv (MPI_Comm          *comm,
     BSON_ASSERT (iovcnt > 0);    
     BSON_ASSERT(expire_at); // Only the blocking version is implemented right now
 
-    int i;
-    int bytes = 0;
-    for (i =0; i< iovcnt;i++){
-        bytes+= iov[i].iov_len;
+    /* in the case when it's only 1 we don't need to malloc or memcpy runs faster */
+    if (iovcnt == 1){
+        MPI_Send(iov[0].iov_base, iov[0].iov_len,MPI_CHAR,0,0,*comm);
+        RETURN(iov[0].iov_len);
     }
+    else {
+        int i;
+        int bytes = 0;
+        for (i =0; i< iovcnt;i++){
+            bytes+= iov[i].iov_len;
+        }
 
-    /* would ideally not malloc to send one big message but there is currently
-     * no support for reforming segmented messages */
+        /* would ideally not malloc to send one big message but there is currently
+         * no support for reforming segmented messages */
 
-    char *msg = malloc(bytes*sizeof(char));
-    char* msg_tail = msg;
+        char *msg = malloc(bytes*sizeof(char));
+        char* msg_tail = msg;
 
-    /* iovcnt is greater than 1 we will assemble the message */
-    for (i = 0; i < iovcnt; i++) {
-        memcpy (msg_tail, (char *) iov[i].iov_base, iov[i].iov_len);
-        msg_tail+= iov[i].iov_len;
+        /* iovcnt is greater than 1 we will assemble the message */
+        for (i = 0; i < iovcnt; i++) {
+            memcpy (msg_tail, (char *) iov[i].iov_base, iov[i].iov_len);
+            msg_tail+= iov[i].iov_len;
+        }
+
+        MPI_Send(msg, bytes, MPI_CHAR, 0, 0,*comm);
+
+        free(msg);
+
+        RETURN(bytes);
     }
-
-    MPI_Send(msg, bytes, MPI_CHAR, 0, 0,*comm);
-
-    free(msg);
-
-    RETURN(bytes);
 }
