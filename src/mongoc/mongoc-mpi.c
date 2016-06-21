@@ -71,27 +71,31 @@ ssize_t mongoc_mpi_sendv (MPI_Comm          *comm,
                           mongoc_iovec_t    *iov,
                           size_t            iovcnt,
                           int64_t           expire_at) {
-    
-     *mpi_stream = (mongoc_stream_mpi_t *)stream;
 
     BSON_ASSERT (iovcnt > 0);    
     BSON_ASSERT(expire_at); // Only the blocking version is implemented right now
 
-
-    char *msg = buf;
-    size_t bytes = 0;
-
-    /* TODO if iovcnt is greater than 1 we will assemble the message */
-    for (i = 0; i < iovcnt; i++) {
-        char* msg_tail = msg + bytes;
-        memcpy (msg_tail, (char *) iov[i].iov_base, iov[i].iov_len);
-
-        bytes+=iov[i].iov_len;
+    int i;
+    int bytes = 0;
+    for (i =0; i< iovcnt;i++){
+        bytes+= iov[i].iov_len;
     }
 
-    MPI_Send(msg, bytes, MPI_CHAR, 0, 0,mpi_stream->comm);
+    /* would ideally not malloc to send one big message but there is currently
+     * no support for reforming segmented messages */
 
-    /* mpi is a blocking send that terminates when all bytes are sent
-     thus it will always send the amount of bytes specified */
+    char *msg = malloc(bytes*sizeof(char));
+    char* msg_tail = msg;
+
+    /* iovcnt is greater than 1 we will assemble the message */
+    for (i = 0; i < iovcnt; i++) {
+        memcpy (msg_tail, (char *) iov[i].iov_base, iov[i].iov_len);
+        msg_tail+= iov[i].iov_len;
+    }
+
+    MPI_Send(msg, bytes, MPI_CHAR, 0, 0,*comm);
+
+    free(msg);
+
     RETURN(bytes);
 }
