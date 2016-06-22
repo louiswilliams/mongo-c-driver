@@ -27,6 +27,9 @@ struct _mongoc_stream_mpi_t
 {
    mongoc_stream_t  vtable;
    MPI_Comm* comm;
+   char* buffer;
+   int buff_len;
+   int cur_ptr;
 };
 
 
@@ -43,23 +46,53 @@ get_expiration (int32_t timeout_msec)
 }
 
 
+/* there is no way to close a communicator */
 static int
 _mongoc_stream_mpi_close (mongoc_stream_t *stream)
 {
-  RETURN(0);
+   RETURN (0);
 }
 
 
 static void
 _mongoc_stream_mpi_destroy (mongoc_stream_t *stream)
-{}
+{
+   ENTRY;
+   mongoc_stream_mpi_t *mpi_stream = (mongoc_stream_mpi_t *)stream;
+   int ret;
+
+   ENTRY;
+
+   BSON_ASSERT(mpi_stream->buffer != NULL);
+   if (mpi_stream->buffer){
+    free(mpi_stream->buffer);
+    mpi_stream->buffer = NULL;
+   }
+
+   BSON_ASSERT (mpi_stream);
+
+   if (mpi_stream->comm) {
+      MPI_Comm_free(mpi_stream->comm);
+      mpi_stream->comm = NULL;
+   }
+   bson_free (mpi_stream);
+   
+   EXIT;
+}
+
 
 
 static void
 _mongoc_stream_mpi_failed (mongoc_stream_t *stream)
-{}
+{
+   ENTRY;
 
+   _mongoc_stream_mpi_destroy (stream);
 
+   EXIT;
+}
+
+/** there is no setup of sockopt for the communicator */
 static int
 _mongoc_stream_mpi_setsockopt (mongoc_stream_t *stream,
                                   int              level,
@@ -71,6 +104,8 @@ _mongoc_stream_mpi_setsockopt (mongoc_stream_t *stream,
 }
 
 
+/** atm we are not buffering and mpi is a message interface so not idea
+  * of flushing a buffer */
 static int
 _mongoc_stream_mpi_flush (mongoc_stream_t *stream)
 {
@@ -97,8 +132,44 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
   BSON_ASSERT(iovcnt == 1); // We can't handle more than one iovec at the moment
 
   expire_at = get_expiration(timeout_msec);
+  // check the buffer length if it is nonempty read the bytes from buffer first
+  // before doing a recv on the communicator
+  if (mpi_stream->buffer != NULL && (mpi_stream->buff_len - mpi_stream->cur_ptr) >= min_bytes){
 
-  nread = mongoc_mpi_recv(mpi_stream->comm, iov[0].iov_base, iov[0].iov_len, expire_at);
+    // iov_len is the amount of bytes it wants to read
+    memcpy (mpi_stream->buffer, (char*) iov[0].iov_base, iov[0].iov_len);
+    mpi_stream->cur_ptr += iov[0].iov_len;
+    if (mpi_stream->cur_ptr >= mpi_stream->buff_len){
+      mpi_stream->cur_ptr = 0;
+      mpi_stream->buff_len = 0;
+      free(mpi_stream->buffer);
+      mpi_stream->buffer = NULL;
+    }
+  }
+  else {
+    // read the iov_len (this is the amount of bytes it wants to read)
+    // store the rest of the message in a buffer
+    MPI_Status probeStatus;
+    MPI_Probe(MPI_ANY_SOURCE,
+              MPI_ANY_TAG,
+              *(mpi_stream->comm),
+              &probeStatus);
+
+    int mpiLen;
+    MPI_Get_count(&probeStatus, MPI_CHAR, &mpiLen);
+
+    if (mpiLen > iov[0].iov_len) {
+      mpi_stream->buffer = malloc(mpiLen);
+      mpi_stream->buff_len = mpiLen;
+      nread = mongoc_mpi_recv(mpi_stream->comm, mpi_stream->buffer, mpiLen, expire_at);
+      mpi_stream->cur_ptr = nread;
+      memcpy(mpi_stream->buffer,iov[0].iov_base, iov[0].iov_len);
+    }
+    else {
+      mpi_stream->buffer = malloc(mpiLen);
+      nread = mongoc_mpi_recv(mpi_stream->comm, (char *)iov[0].iov_base, iov[0].iov_len, expire_at);
+    }
+  }
 
   RETURN(0);
 }
@@ -130,7 +201,7 @@ _mongoc_stream_mpi_poll (mongoc_stream_poll_t *streams,
 static bool
 _mongoc_stream_mpi_check_closed (mongoc_stream_t *stream) /* IN */
 {
-  RETURN(0);
+  RETURN(false);
 }
 
 
@@ -168,6 +239,9 @@ mongoc_stream_mpi_new (MPI_Comm* comm) /* IN */
    stream->vtable.check_closed = _mongoc_stream_mpi_check_closed;
    stream->vtable.poll = _mongoc_stream_mpi_poll;
    stream->comm = comm;
+   stream-> buffer = NULL;
+   stream->buff_len = 0;
+   stream->cur_ptr = 0;
 
    return (mongoc_stream_t *)stream;
 }
