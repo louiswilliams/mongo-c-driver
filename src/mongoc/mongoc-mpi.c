@@ -106,3 +106,60 @@ ssize_t mongoc_mpi_sendv (MPI_Comm          *comm,
         RETURN(bytes);
     }
 }
+
+static bool
+_mongoc_mpi_wait (MPI_Comm          *comm,          /* IN */
+                  int64_t           expire_at)      /* IN */
+{
+   int ret;
+   int timeout;
+   int64_t now;
+
+   int probe_flag;
+   MPI_Status probeStatus;
+
+   ENTRY;
+
+   now = bson_get_monotonic_time();
+
+   for (;;) {
+      ret = MPI_Iprobe(MPI_ANY_SOURCE,
+              MPI_ANY_TAG,
+              *comm,
+              &probe_flag,
+              &probeStatus);
+
+      if (ret > 0 && probe_flag > 0) {
+         /* Something happened, so return that */
+         RETURN (true);
+      } 
+      /* error failure of the iprobe */
+      else if (ret < 0){
+        return (false);
+      }
+      /* flag false means nothing received inbound */
+      else {
+         /* probe itself failed */
+          if (expire_at < now) {
+             RETURN (false);
+          } else {
+             continue;
+          }
+         /* poll timed out */
+         RETURN (false);
+      }
+   }
+}
+
+bool
+mongoc_mpi_check_closed (MPI_Comm *comm) /* IN */
+{
+   ssize_t r;
+
+   if (_mongoc_mpi_wait(comm, 1)) {
+    return false;
+   }
+   else {
+    return true;
+   }
+}
