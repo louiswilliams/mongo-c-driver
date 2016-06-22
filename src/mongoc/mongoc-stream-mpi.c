@@ -137,6 +137,8 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
   if (mpi_stream->buffer != NULL && (mpi_stream->buff_len - mpi_stream->cur_ptr) >= min_bytes){
 
     // iov_len is the amount of bytes it wants to read
+    // at the moment it seems iov_len and min_bytes are equal in value
+    // from mongoc-stream.c implementation
     memcpy (mpi_stream->buffer, (char*) iov[0].iov_base, iov[0].iov_len);
     mpi_stream->cur_ptr += iov[0].iov_len;
     if (mpi_stream->cur_ptr >= mpi_stream->buff_len){
@@ -181,7 +183,7 @@ _mongoc_stream_mpi_writev (mongoc_stream_t *stream,
                               size_t           iovcnt,
                               int32_t          timeout_msec)
 {
-   mongoc_stream_mpi_t *mpi_stream = (mongoc_stream_mpi_t *)stream;
+  mongoc_stream_mpi_t *mpi_stream = (mongoc_stream_mpi_t *)stream;
 
   BSON_ASSERT (iovcnt > 0);
 
