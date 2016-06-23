@@ -76,6 +76,7 @@ _mongoc_stream_mpi_destroy (mongoc_stream_t *stream)
       mpi_stream->comm = NULL;
    }
    bson_free (mpi_stream);
+   mpi_stream = NULL;
    
    EXIT;
 }
@@ -168,7 +169,6 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
       memcpy(mpi_stream->buffer,iov[0].iov_base, iov[0].iov_len);
     }
     else {
-      mpi_stream->buffer = malloc(mpiLen);
       nread = mongoc_mpi_recv(mpi_stream->comm, (char *)iov[0].iov_base, iov[0].iov_len, expire_at);
     }
   }
@@ -197,13 +197,55 @@ _mongoc_stream_mpi_poll (mongoc_stream_poll_t *streams,
                             int32_t               timeout_msec)
 
 {
-  RETURN(0);
+  // for each stream cast to a mpi stream and check their events for some timeout
+  int i;
+  ssize_t ret = -1;
+  mongoc_mpi_poll_t *mpi_ds;
+  mongoc_stream_mpi_t *mpi_stream;
+
+  for (i=0; i < nstreams; i++){
+    mpi_stream = (mongoc_stream_mpi_t *)streams[i].stream;
+
+    if (!mpi_stream->comm){
+      // cleanup
+      bson_free(mpi_ds);
+      RETURN (ret);
+    }
+
+    mpi_ds[i].comm = mpi_stream->comm;
+    mpi_ds[i].events = streams[i].events;
+    mpi_ds[i].revents = 0;
+  }
+
+  // check the buffer for pollin events to flag reads for th revents
+
+  // call helper function that polls
+  ret = mongoc_mpi_poll(mpi_ds,nstreams, timeout_msec);
+
+  if (ret > 0){
+    for (i = 0;i <nstreams;i++){
+      streams[i].revents = mpi_ds[i].revents;
+    }
+  }
+
+  bson_free(mpi_ds);
+  RETURN(ret);
 }
 
 static bool
 _mongoc_stream_mpi_check_closed (mongoc_stream_t *stream) /* IN */
 {
-  RETURN(false);
+  mongoc_stream_mpi_t *mpi_stream = (mongoc_stream_mpi_t *)stream;
+
+  ENTRY;
+
+  BSON_ASSERT (stream);
+
+  if (mpi_stream->comm) {
+    RETURN (mongoc_mpi_check_closed (mpi_stream->comm));
+  }
+
+  RETURN(true);
 }
 
 

@@ -109,7 +109,8 @@ ssize_t mongoc_mpi_sendv (MPI_Comm          *comm,
 
 static bool
 _mongoc_mpi_wait (MPI_Comm          *comm,          /* IN */
-                  int64_t           expire_at)      /* IN */
+                  int64_t           expire_at,
+                  int*              errors)      /* IN */
 {
    int ret;
    int timeout;
@@ -129,16 +130,18 @@ _mongoc_mpi_wait (MPI_Comm          *comm,          /* IN */
               &probe_flag,
               &probeStatus);
 
-      if (ret > 0 && probe_flag > 0) {
-         /* Something happened, so return that */
+      if (ret > 0 && probe_flag) {
+         /* there is a msg to recieve, */
          RETURN (true);
       } 
       /* error failure of the iprobe */
       else if (ret < 0){
+        *errors |= POLLERR;
         return (false);
       }
       /* flag false means nothing received inbound */
       else {
+         now = bson_get_monotonic_time();
          /* probe itself failed */
           if (expire_at < now) {
              RETURN (false);
@@ -155,11 +158,83 @@ bool
 mongoc_mpi_check_closed (MPI_Comm *comm) /* IN */
 {
    ssize_t r;
-
-   if (_mongoc_mpi_wait(comm, 1)) {
+   int errors = 0;
+   if (_mongoc_mpi_wait(comm, 0,&errors)) {
     return false;
    }
    else {
     return true;
    }
+}
+
+ssize_t
+mongoc_mpi_poll (mongoc_mpi_poll_t *mpids,          /* IN */
+                 size_t                n_mpids,         /* IN */
+                 int32_t               timeout)      /* IN */
+{
+   int ret = 0;
+   int i;
+   int num_events;
+
+   int probe_flag;
+   MPI_Status probeStatus;
+
+   ENTRY;
+
+   BSON_ASSERT (mpids);
+
+   int now = bson_get_monotonic_time();
+
+   while (now <= timeout){
+    num_events = 0;
+
+    // check all mpi_ds nonblockingly for each event
+    for (i =0; i < n_mpids; i++){
+      
+      // can it nonblock recieve
+      // i am assuming recieving normal and priority is the same in mpi
+      int errors = 0;
+
+      if (mpids->events & (POLLIN|POLLPRI)) {
+        ret = _mongoc_mpi_wait(mpids->comm,0,&errors);
+        if (ret){
+            mpids[i].revents |= (POLLIN & mpids->events);
+            mpids[i].revents |= (POLLPRI & mpids->events);
+        }
+        else {
+          mpids[i].revents |= errors;
+          RETURN(-1);
+        }
+      }
+
+      // a communicator send doesn't block so can always pollout
+      if (mpids->events & POLLOUT){
+        mpids[i].revents |= POLLOUT;
+      }
+
+      // check if all events are satisfied
+      if (mpids->revents & mpids->events){
+        num_events+= 1;
+      }
+    }
+
+    // stop checking if all events are satisfied
+    if (num_events == n_mpids){
+      break;
+    }
+    // update the current time for the timeout
+    else {
+      now = bson_get_monotonic_time();
+    }
+   }
+
+   // accumulate the number of elements in mpids arra that has
+   // events occurred
+   num_events = 0;
+   for (i = 0;i< n_mpids;i++){
+    if (mpids[i].revents > 0){
+      num_events++;
+    }
+   }
+   return num_events;
 }

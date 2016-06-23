@@ -60,6 +60,12 @@ ssize_t          mongoc_mpi_sendv         (MPI_Comm              *comm,
                                            size_t                 iovcnt,
                                            int64_t                expire_at);
 
+ssize_t			     mongoc_mpi_poll 		       (mongoc_mpi_poll_t    *mpids,     
+						                               size_t                n_mpids,     
+						                               int32_t               timeout);
+
+bool             mongoc_mpi_check_closed   (MPI_Comm             *comm);
+
 
 
 
