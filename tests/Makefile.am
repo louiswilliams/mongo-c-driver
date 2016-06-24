@@ -1,3 +1,4 @@
+noinst_PROGRAMS += test-mpi
 noinst_PROGRAMS += test-load
 noinst_PROGRAMS += test-secondary
 noinst_PROGRAMS += test-replica-set
@@ -38,6 +39,12 @@ endif
 if OS_WIN32
 TEST_LIBS += -lshlwapi
 endif
+
+test_mpi_SOURCES = \
+	tests/test-mpi.c \
+	tests/mongoc-tests.c
+test_mpi_CFLAGS = $(TEST_CFLAGS)
+test_mpi_LDADD = $(TEST_LIBS)
 
 test_load_SOURCES = \
 	tests/test-load.c \
