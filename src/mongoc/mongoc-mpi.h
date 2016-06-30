@@ -45,17 +45,17 @@ BSON_BEGIN_DECLS
 
 typedef struct
 {
-   MPI_Comm        *comm;
+   MPI_Comm         comm;
    int              events;
    int              revents;
 } mongoc_mpi_poll_t;
 
-ssize_t          mongoc_mpi_recv          (MPI_Comm              *comm,
+ssize_t          mongoc_mpi_recv          (MPI_Comm              comm,
                                            void                  *buf,
                                            size_t                 buflen,
                                            int64_t                expire_at);
 
-ssize_t          mongoc_mpi_sendv         (MPI_Comm              *comm,
+ssize_t          mongoc_mpi_sendv         (MPI_Comm              comm,
                                            mongoc_iovec_t        *iov,
                                            size_t                 iovcnt,
                                            int64_t                expire_at);
@@ -64,7 +64,7 @@ ssize_t			     mongoc_mpi_poll 		       (mongoc_mpi_poll_t    *mpids,
 						                               size_t                n_mpids,     
 						                               int32_t               timeout);
 
-bool             mongoc_mpi_check_closed   (MPI_Comm             *comm);
+bool             mongoc_mpi_check_closed   (MPI_Comm             comm);
 
 
 

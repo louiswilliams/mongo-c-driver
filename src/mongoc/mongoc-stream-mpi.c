@@ -63,7 +63,6 @@ _mongoc_stream_mpi_destroy (mongoc_stream_t *stream)
 
    ENTRY;
 
-   BSON_ASSERT(mpi_stream->buffer != NULL);
    if (mpi_stream->buffer){
     free(mpi_stream->buffer);
     mpi_stream->buffer = NULL;
@@ -71,14 +70,11 @@ _mongoc_stream_mpi_destroy (mongoc_stream_t *stream)
 
    BSON_ASSERT (mpi_stream);
 
-   if (mpi_stream->comm) {
-      MPI_Comm_free(mpi_stream->comm);
-      mpi_stream->comm = NULL;
-   }
    bson_free (mpi_stream);
    mpi_stream = NULL;
    
    EXIT;
+   return;
 }
 
 
@@ -122,8 +118,9 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
                              int32_t          timeout_msec)
 {
   mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
+
+  printf("readv again\n");
   int64_t expire_at;
-  ssize_t ret = 0;
   ssize_t nread;
 
   ENTRY;
@@ -136,7 +133,7 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
   // check the buffer length if it is nonempty read the bytes from buffer first
   // before doing a recv on the communicator
   if (mpi_stream->buffer != NULL && (mpi_stream->buff_len - mpi_stream->cur_ptr) >= min_bytes){
-
+    printf("%d. what is in the buffer %s\n",timeout_msec, mpi_stream->buffer);
     // iov_len is the amount of bytes it wants to read
     // at the moment it seems iov_len and min_bytes are equal in value
     // from mongoc-stream.c implementation
@@ -150,13 +147,16 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
     }
   }
   else {
+    printf("%d. i am here waiting\n",timeout_msec);
     // read the iov_len (this is the amount of bytes it wants to read)
     // store the rest of the message in a buffer
     MPI_Status probeStatus;
     MPI_Probe(MPI_ANY_SOURCE,
               MPI_ANY_TAG,
-              *(mpi_stream->comm),
+              mpi_stream->comm,
               &probeStatus);
+
+    printf("%d. i am through here\n",timeout_msec);
 
     int mpiLen;
     MPI_Get_count(&probeStatus, MPI_CHAR, &mpiLen);
@@ -173,7 +173,7 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
     }
   }
 
-  RETURN(0);
+  RETURN(nread);
 }
 
 

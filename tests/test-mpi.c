@@ -12,24 +12,10 @@
 #define TIMEOUT 10000
 #define WAIT 1000
 
-typedef struct
-{
-   unsigned short server_port;
-   mongoc_cond_t  cond;
-   mongoc_mutex_t cond_mutex;
-   bool           closed_comm;
-   int            amount;
-} mpi_test_data_t;
-
 static void*
-test_mpi_server (void *data_) 
+test_mpi_server () 
 {
-   mpi_test_data_t *data = (mpi_test_data_t *)data_;
-   struct sockaddr_in server_addr = { 0 };
-   mongoc_socket_t *listen_sock;
-   mongoc_socket_t *conn_sock;
    mongoc_iovec_t iov;
-   socklen_t sock_len;
    ssize_t r;
    char buf[5];
    mongoc_stream_t *stream;
@@ -37,35 +23,34 @@ test_mpi_server (void *data_)
    iov.iov_base = buf;
    iov.iov_len = sizeof (buf);
 
-   listen_sock = mongoc_socket_new (AF_INET, SOCK_STREAM, 0);
-   assert (listen_sock);
+   int listen_sock;
+   listen_sock = socket(AF_INET,SOCK_STREAM,0);
+   assert(listen_sock);
 
+   struct sockaddr_in server_addr = { 0 };
    server_addr.sin_family = AF_INET;
-   server_addr.sin_addr.s_addr = htonl (INADDR_LOOPBACK);
-   server_addr.sin_port = htons (0);
+   server_addr.sin_addr.s_addr = htonl (INADDR_ANY);
+   server_addr.sin_port = htons (27020);
 
-   r = mongoc_socket_bind (listen_sock,
-                           (struct sockaddr *)&server_addr,
-                           sizeof server_addr);
+   r = bind(listen_sock,(struct sockaddr *)&server_addr,sizeof server_addr);
    assert(r == 0);
 
-   r = mongoc_socket_listen (listen_sock, 10);
+   r = listen(listen_sock, 5);
    assert(r == 0);
 
-   mongoc_mutex_lock(&(data->cond_mutex));
-   data->server_port = ntohs(server_addr.sin_port);
-   mongoc_cond_signal(&(data->cond));
-   mongoc_mutex_unlock(&(data->cond_mutex));
+   int conn_sock;
+   socklen_t clilen;
+   struct sockaddr_in cli_addr;
 
-   conn_sock = mongoc_socket_accept (listen_sock, -1);
+   conn_sock = accept(listen_sock, (struct sockaddr *) &cli_addr,&clilen);
    assert (conn_sock);
 
-   MPI_Comm* intercom = malloc(sizeof(MPI_Comm));
-   MPI_Comm_join(conn_sock->sd,intercom);
+   // comm join is blocking will connect when other side calls comm join
+   MPI_Comm* intercom = (MPI_Comm*)malloc(sizeof(MPI_Comm));
+   r = MPI_Comm_join(conn_sock,intercom);
+   assert (r == 0);
 
-   mongoc_socket_destroy(conn_sock);
-
-   stream = mongoc_stream_mpi_new (intercom);
+   stream = mongoc_stream_mpi_new (*intercom);
 
    r = mongoc_stream_readv (stream, &iov, 1, 5, TIMEOUT);
    assert (r == 5);
@@ -73,61 +58,55 @@ test_mpi_server (void *data_)
 
    strcpy (buf, "pong");
 
+   printf("\n server sending out %s\n",buf);
+
    r = mongoc_stream_writev (stream, &iov, 1, TIMEOUT);
    assert (r == 5);
 
+   printf("\n server is past writing\n");
+
    mongoc_stream_destroy (stream);
-
-   mongoc_mutex_lock(&data->cond_mutex);
-   data->closed_comm = true;
-   mongoc_cond_signal(&data->cond);
-   mongoc_mutex_unlock(&data->cond_mutex);
-
-   mongoc_socket_destroy (listen_sock);
-
    return NULL;
 }
 
 static void*
-test_mpi_client (void *data_)
+test_mpi_client ()
 {
-   mpi_test_data_t *data = (mpi_test_data_t *)data_;
-   mongoc_socket_t *conn_sock;
    char buf[5];
    ssize_t r;
    bool closed;
-   struct sockaddr_in server_addr = { 0 };
    mongoc_iovec_t iov;
    mongoc_stream_t *stream;
 
    iov.iov_base = buf;
    iov.iov_len = sizeof (buf);
 
-   conn_sock = mongoc_socket_new (AF_INET, SOCK_STREAM, 0);
+   int conn_sock;
+   struct sockaddr_in server_addr = { 0 };
+   conn_sock = socket(AF_INET, SOCK_STREAM, 0);
    assert (conn_sock);
 
-   mongoc_mutex_lock(&data->cond_mutex);
-   while (! data->server_port) {
-      mongoc_cond_wait(&data->cond, &data->cond_mutex);
-   }
-   mongoc_mutex_unlock(&data->cond_mutex);
-
+   struct hostent *server;
+   server = gethostbyname("Kenneths-MacBook-Pro.local");
    server_addr.sin_family = AF_INET;
-   server_addr.sin_port = htons(data->server_port);
-   server_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+   server_addr.sin_port = htons(27020);
 
-   r = mongoc_socket_connect (conn_sock, (struct sockaddr *)&server_addr, sizeof(server_addr), -1);
+   bcopy((char *)server->h_addr, (char *)&server_addr.sin_addr.s_addr,server->h_length);
+
+   r = connect (conn_sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
    assert (r == 0);
 
-      // comm join is blocking will connect when other side calls comm join
-   MPI_Comm* intercom = malloc(sizeof(MPI_Comm));
-   MPI_Comm_join(conn_sock->sd,intercom);
+   // comm join is blocking will connect when other side calls comm join
+   MPI_Comm* intercom = (MPI_Comm*)malloc(sizeof(MPI_Comm));
+   r = MPI_Comm_join(conn_sock,intercom);
+   assert (r==0);
 
-   mongoc_socket_destroy(conn_sock);
-
-   stream = mongoc_stream_mpi_new (intercom);
+   // comm join is blocking will connect when other side calls comm join
+   stream = mongoc_stream_mpi_new (*intercom);
 
    strcpy (buf, "ping");
+
+   close(conn_sock);
 
    closed = mongoc_stream_check_closed(stream);
    assert (closed == false);
@@ -138,16 +117,14 @@ test_mpi_client (void *data_)
    closed = mongoc_stream_check_closed (stream);
    assert (closed == false);
 
-   r = mongoc_stream_readv (stream, &iov, 1, 5, TIMEOUT);
+   printf("\n client is recieving\n");
+
+   r = mongoc_stream_readv (stream, &iov, 1, 5, 2);
    assert (r == 5);
    assert (strcmp (buf, "pong") == 0);
 
-   mongoc_mutex_lock(&data->cond_mutex);
-   while (! data->closed_comm) {
-      mongoc_cond_wait(&data->cond, &data->cond_mutex);
-   }
-   mongoc_mutex_unlock(&data->cond_mutex);
-
+   // not sure if this works properly
+   printf("\n client check closed\n");
    closed = mongoc_stream_check_closed (stream);
    assert (closed == true);
 
@@ -159,26 +136,21 @@ test_mpi_client (void *data_)
 static void
 test_mongoc_mpi_check_closed (void)
 {
-   mpi_test_data_t data = { 0 };
-   mongoc_thread_t threads[2];
-   int i, r;
+   int provided;
+   MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
 
-   mongoc_mutex_init (&data.cond_mutex);
-   mongoc_cond_init (&data.cond);
+   int world_rank;
+   MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
-   r = mongoc_thread_create (threads, &test_mpi_server, &data);
-   assert (r == 0);
-
-   r = mongoc_thread_create (threads + 1, &test_mpi_client, &data);
-   assert (r == 0);
-
-   for (i = 0; i < 2; i++) {
-      r = mongoc_thread_join (threads[i]);
-      assert (r == 0);
+   if (world_rank == 0){
+      test_mpi_server();
+   }
+   else if (world_rank == 1){
+      test_mpi_client();
    }
 
-   mongoc_mutex_destroy (&data.cond_mutex);
-   mongoc_cond_destroy (&data.cond);
+   /* Shutdown */
+   MPI_Finalize();
 }
 
 

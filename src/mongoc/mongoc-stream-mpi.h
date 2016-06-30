@@ -33,7 +33,7 @@ BSON_BEGIN_DECLS
 typedef struct _mongoc_stream_mpi_t mongoc_stream_mpi_t;
 
 
-mongoc_stream_t *mongoc_stream_mpi_new        (MPI_Comm* comm);
+mongoc_stream_t *mongoc_stream_mpi_new        (MPI_Comm comm);
 
 
 BSON_END_DECLS

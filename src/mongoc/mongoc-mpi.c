@@ -29,7 +29,7 @@
 #undef MONGOC_LOG_DOMAIN
 #define MONGOC_LOG_DOMAIN "mpi"
 
-ssize_t mongoc_mpi_recv (MPI_Comm     *comm,
+ssize_t mongoc_mpi_recv (MPI_Comm      comm,
                          void         *buf,
                          size_t        buflen,
                          int64_t       expire_at) {
@@ -42,13 +42,17 @@ ssize_t mongoc_mpi_recv (MPI_Comm     *comm,
     BSON_ASSERT(expire_at); // Only the blocking version is implemented right now
 
     MPI_Status probeStatus;
+
+    printf("\n we have started probing\n");
     MPI_Probe(MPI_ANY_SOURCE,
               MPI_ANY_TAG,
-              *comm,
+              comm,
               &probeStatus);
 
     int msgLen;
     MPI_Get_count(&probeStatus, MPI_CHAR, &msgLen);
+
+    printf("\n we have gotten through probing\n");
 
     if (msgLen > buflen) {
         // How do we throw errors?
@@ -61,13 +65,13 @@ ssize_t mongoc_mpi_recv (MPI_Comm     *comm,
              MPI_CHAR,
              MPI_ANY_SOURCE,
              MPI_ANY_TAG,
-             *comm,
+             comm,
              &recvStatus);
 
     RETURN(msgLen);
 }
 
-ssize_t mongoc_mpi_sendv (MPI_Comm          *comm,
+ssize_t mongoc_mpi_sendv (MPI_Comm          comm,
                           mongoc_iovec_t    *iov,
                           size_t            iovcnt,
                           int64_t           expire_at) {
@@ -77,7 +81,9 @@ ssize_t mongoc_mpi_sendv (MPI_Comm          *comm,
 
     /* in the case when it's only 1 we don't need to malloc or memcpy runs faster */
     if (iovcnt == 1){
-        MPI_Send(iov[0].iov_base, iov[0].iov_len,MPI_CHAR,0,0,*comm);
+        int r = MPI_Send(iov[0].iov_base, iov[0].iov_len,MPI_CHAR,0,0,comm);
+        assert(r == 0);
+        printf("we sent out %s and length %zu\n",iov[0].iov_base,iov[0].iov_len);
         RETURN(iov[0].iov_len);
     }
     else {
@@ -99,7 +105,7 @@ ssize_t mongoc_mpi_sendv (MPI_Comm          *comm,
             msg_tail+= iov[i].iov_len;
         }
 
-        MPI_Send(msg, bytes, MPI_CHAR, 0, 0,*comm);
+        MPI_Send(msg, bytes, MPI_CHAR, 0, MPI_ANY_TAG,comm);
 
         free(msg);
 
@@ -108,7 +114,7 @@ ssize_t mongoc_mpi_sendv (MPI_Comm          *comm,
 }
 
 static bool
-_mongoc_mpi_wait (MPI_Comm          *comm,          /* IN */
+_mongoc_mpi_wait (MPI_Comm          comm,          /* IN */
                   int64_t           expire_at,
                   int*              errors)      /* IN */
 {
@@ -126,7 +132,7 @@ _mongoc_mpi_wait (MPI_Comm          *comm,          /* IN */
    for (;;) {
       ret = MPI_Iprobe(MPI_ANY_SOURCE,
               MPI_ANY_TAG,
-              *comm,
+              comm,
               &probe_flag,
               &probeStatus);
 
@@ -155,20 +161,32 @@ _mongoc_mpi_wait (MPI_Comm          *comm,          /* IN */
 }
 
 bool
-mongoc_mpi_check_closed (MPI_Comm *comm) /* IN */
+mongoc_mpi_check_closed (MPI_Comm comm) /* IN */
 {
    ssize_t r;
    int errors = 0;
-   if (_mongoc_mpi_wait(comm, 0,&errors)) {
+   int ret;
+   int probe_flag;
+   MPI_Status probeStatus;
+
+   ret = MPI_Iprobe(MPI_ANY_SOURCE,
+              MPI_ANY_TAG,
+              comm,
+              &probe_flag,
+              &probeStatus);
+
+   // 0 means there is no error message so it isn't closed
+   if (ret == 0){
     return false;
    }
    else {
     return true;
    }
+
 }
 
 ssize_t
-mongoc_mpi_poll (mongoc_mpi_poll_t *mpids,          /* IN */
+mongoc_mpi_poll (mongoc_mpi_poll_t     *mpids,          /* IN */
                  size_t                n_mpids,         /* IN */
                  int32_t               timeout)      /* IN */
 {
