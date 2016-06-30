@@ -169,7 +169,7 @@ mongoc_mpi_check_closed (MPI_Comm comm) /* IN */
    int probe_flag;
    MPI_Status probeStatus;
 
-   ret = MPI_Iprobe(MPI_ANY_SOURCE,
+   ret = MPI_probe(MPI_ANY_SOURCE,
               MPI_ANY_TAG,
               comm,
               &probe_flag,
@@ -188,7 +188,7 @@ mongoc_mpi_check_closed (MPI_Comm comm) /* IN */
 ssize_t
 mongoc_mpi_poll (mongoc_mpi_poll_t     *mpids,          /* IN */
                  size_t                n_mpids,         /* IN */
-                 int32_t               timeout)      /* IN */
+                 int32_t               timeout)         /* IN */
 {
    int ret = 0;
    int i;
