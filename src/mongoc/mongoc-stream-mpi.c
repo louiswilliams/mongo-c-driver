@@ -26,7 +26,7 @@
 struct _mongoc_stream_mpi_t
 {
    mongoc_stream_t  vtable;
-   MPI_Comm* comm;
+   MPI_Comm comm;
    char* buffer;
    int buff_len;
    int cur_ptr;
@@ -267,7 +267,7 @@ _mongoc_stream_mpi_check_closed (mongoc_stream_t *stream) /* IN */
  */
 
 mongoc_stream_t *
-mongoc_stream_mpi_new (MPI_Comm* comm) /* IN */
+mongoc_stream_mpi_new (MPI_Comm comm) /* IN */
 {
    mongoc_stream_mpi_t *stream;
 

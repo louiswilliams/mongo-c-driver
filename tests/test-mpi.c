@@ -46,11 +46,11 @@ test_mpi_server ()
    assert (conn_sock);
 
    // comm join is blocking will connect when other side calls comm join
-   MPI_Comm* intercom = (MPI_Comm*)malloc(sizeof(MPI_Comm));
-   r = MPI_Comm_join(conn_sock,intercom);
+   MPI_Comm intercom;
+   r = MPI_Comm_join(conn_sock,&intercom);
    assert (r == 0);
 
-   stream = mongoc_stream_mpi_new (*intercom);
+   stream = mongoc_stream_mpi_new (intercom);
 
    r = mongoc_stream_readv (stream, &iov, 1, 5, TIMEOUT);
    assert (r == 5);
@@ -97,12 +97,12 @@ test_mpi_client ()
    assert (r == 0);
 
    // comm join is blocking will connect when other side calls comm join
-   MPI_Comm* intercom = (MPI_Comm*)malloc(sizeof(MPI_Comm));
-   r = MPI_Comm_join(conn_sock,intercom);
+   MPI_Comm intercom;
+   r = MPI_Comm_join(conn_sock,&intercom);
    assert (r==0);
 
    // comm join is blocking will connect when other side calls comm join
-   stream = mongoc_stream_mpi_new (*intercom);
+   stream = mongoc_stream_mpi_new (intercom);
 
    strcpy (buf, "ping");
 
