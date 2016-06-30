@@ -169,10 +169,9 @@ mongoc_mpi_check_closed (MPI_Comm comm) /* IN */
    int probe_flag;
    MPI_Status probeStatus;
 
-   ret = MPI_probe(MPI_ANY_SOURCE,
+   ret = MPI_Probe(MPI_ANY_SOURCE,
               MPI_ANY_TAG,
               comm,
-              &probe_flag,
               &probeStatus);
 
    // 0 means there is no error message so it isn't closed
