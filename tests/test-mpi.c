@@ -13,7 +13,7 @@
 #define WAIT 1000
 
 static void*
-test_mpi_server () 
+sendv_test_server () 
 {
    mongoc_iovec_t iov;
    ssize_t r;
@@ -69,8 +69,61 @@ test_mpi_server ()
    return NULL;
 }
 
+/* Testing stream functionality sending 1 message and recieving it 
+ * through 1->n bytes per read.
+ */
 static void*
-test_mpi_client ()
+sendv_test2_client(mongoc_stream_t * stream){
+   char buf[9];
+   ssize_t r;
+
+   mongoc_iovec_t iov;
+   iov.iov_base = buf;
+   iov.iov_len = sizeof (buf);
+
+
+   strcpy(buf,"pingpong");
+   
+   for (int i = 1; i<=9 ;i++){
+      r = mongoc_stream_writev(stream,&iov,1,TIMEOUT);
+   }
+   return NULL;
+}
+
+/* The server will read from the stream 1->n (number of chars)
+ * number of bytes to extract the message */
+static void*
+sendv_test2_server(mongoc_stream_t * stream){
+   char buf[9];
+   ssize_t r;
+
+   for (int i=1;i <= 9;i++){
+      ssize_t len_read = 0;
+
+      while (len_read < 9){    
+         mongoc_iovec_t iov;
+         iov.iov_base = buf + len_read;
+         iov.iov_len = i;
+         len_read += mongoc_stream_readv (stream, &iov, 1, i, TIMEOUT);
+         len_read+=i;
+      }
+
+      printf("this iter is %s\n",buf);
+
+      assert(r == 9);
+      assert (strcmp (buf, "pingpong") == 0);
+   }
+
+   return NULL;
+}
+
+/* Testing stream readv timeout after n seconds */
+
+
+
+
+static void*
+sendv_test_client ()
 {
    char buf[5];
    ssize_t r;
@@ -123,18 +176,13 @@ test_mpi_client ()
    assert (r == 5);
    assert (strcmp (buf, "pong") == 0);
 
-   // not sure if this works properly
-   printf("\n client check closed\n");
-   closed = mongoc_stream_check_closed (stream);
-   assert (closed == true);
-
    mongoc_stream_destroy (stream);
 
    return NULL;
 }
 
 static void
-test_mongoc_mpi_check_closed (void)
+test_mongoc_mpi_test (void)
 {
    int provided;
    MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
@@ -143,10 +191,10 @@ test_mongoc_mpi_check_closed (void)
    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
    if (world_rank == 0){
-      test_mpi_server();
+      sendv_test_server();
    }
    else if (world_rank == 1){
-      test_mpi_client();
+      sendv_test_client();
    }
 
    /* Shutdown */
@@ -159,6 +207,6 @@ int
 main (int   argc,
       char *argv[])
 {
-	test_mongoc_mpi_check_closed();
+	test_mongoc_mpi_test();
 	return 0;
 }

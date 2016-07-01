@@ -14,9 +14,13 @@
  * limitations under the License.
  */
 
+#include <stdio.h>
+#include <math.h>
+
 #include "mongoc-stream-private.h"
 #include "mongoc-stream-mpi.h"
 #include "mongoc-trace.h"
+
 
 
 #undef MONGOC_LOG_DOMAIN
@@ -28,7 +32,7 @@ struct _mongoc_stream_mpi_t
    mongoc_stream_t  vtable;
    MPI_Comm comm;
    char* buffer;
-   int buff_len;
+   size_t buff_len;
    int cur_ptr;
 };
 
@@ -110,6 +114,103 @@ _mongoc_stream_mpi_flush (mongoc_stream_t *stream)
 }
 
 
+/* Reads up to min_bytes of data. Blocks if no bytes have been read.
+ * will continously read the messages until its full or there are no more 
+ * messages left and it would have to block 
+
+ * Base Case: Bytes have been read into iovec and there are no more messages left
+ * in the network buffer.
+ * Base Case 2: iovec buffer is full
+ * Returns: Number of bytes read 
+ */
+static ssize_t
+_mongoc_stream_mpi_probe_read (mongoc_stream_mpi_t* mpi_stream,
+                               mongoc_iovec_t  *iov,
+                               size_t           iovcnt,
+                               size_t           min_bytes,
+                               int64_t          expire_at,
+                               size_t           bytes_read)
+{
+  int probe_flag;
+  int ret;
+  MPI_Status probeStatus;
+  
+  int nread = bytes_read;
+  if (nread > 0){
+        ret = MPI_Iprobe(MPI_ANY_SOURCE,
+                MPI_ANY_TAG,
+                mpi_stream->comm,
+                &probe_flag,
+                &probeStatus);
+
+    // since it has already recieved some number of bytes it will return what it currently
+    // has read, probe flag states if there is something to read return value 0 if no error.
+
+    // Base Case 1 - if no message available and has read bytes return
+    if (ret < 0 ||(ret == 0 && !probe_flag)) {
+        return nread;
+    }
+  }
+
+  // otherwise it will probe (blocking recv) since it hasn't recieved any bytes yet
+  // TODO to implement timeout you would while loop here until the timeout time
+  else {
+        ret = MPI_Probe(MPI_ANY_SOURCE,
+                  MPI_ANY_TAG,
+                  mpi_stream->comm,
+                  &probeStatus);
+  }
+
+  // 3rd step if we are here there is a msg to read
+  int mpiLen;
+  MPI_Get_count(&probeStatus, MPI_CHAR, &mpiLen);
+
+  // remaining bytes in the read buffer
+  int bytes_to_read = iov[0].iov_len - nread;
+  
+  // 4th step buffer to the global bufferstream the leftover of the msg
+  // since the total number of bytes to read is done we return.
+
+  // Base Case 2 - if iov buffer is full return
+  if (mpiLen > bytes_to_read) {
+    mpi_stream->buffer = malloc(mpiLen);
+    mpi_stream->buff_len = mpiLen;
+    mongoc_mpi_recv(mpi_stream->comm, mpi_stream->buffer, mpiLen, expire_at);
+
+    memcpy((char*) iov[0].iov_base, mpi_stream->buffer,bytes_to_read);
+
+    // add bytes of msg read to the nreads what is memcpy'd
+    nread += bytes_to_read;
+    mpi_stream->cur_ptr = nread;
+
+    printf("3. copy is %s\n",iov[0].iov_base);
+
+    return nread;
+  }
+  else {
+    nread += mongoc_mpi_recv(mpi_stream->comm, (char *)iov[0].iov_base, iov[0].iov_len, expire_at);
+    
+    // recursively call to read mimick a stream by continously reading further messages
+    return _mongoc_stream_mpi_probe_read(mpi_stream,iov,iovcnt,min_bytes,expire_at,nread);
+  }
+}
+
+
+/* Returns in iov the msg of size up to min_bytes
+ * Input Precondition:
+ * iov - will only use the first element of the iov
+ *
+ * iovcnt - supports only an iovec of size 1
+ *
+ * min_bytes - no garunteeds of blocking until reading in min_bytes
+ * reads up to min_bytes.
+ *
+ * timeout_msec - timeout is not supported as in other parts fo the code
+ * it is not used passes in -1 indefinite timeout or 0 (immediate)
+ * 
+ * Returns in iov[0] a msg of size less than or equal to min_bytes.
+ * Blocking until there exists a byte to read.
+ */
 static ssize_t
 _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
                              mongoc_iovec_t  *iov,
@@ -118,62 +219,55 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
                              int32_t          timeout_msec)
 {
   mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
-
-  printf("readv again\n");
   int64_t expire_at;
-  ssize_t nread;
+  ssize_t nread = 0;
+  int ret;
 
   ENTRY;
 
   BSON_ASSERT(mpi_stream);
   BSON_ASSERT(mpi_stream->comm);
-  BSON_ASSERT(iovcnt == 1); // We can't handle more than one iovec at the moment
+  BSON_ASSERT(iovcnt == 1); // We are not handling more than one iovec
 
   expire_at = get_expiration(timeout_msec);
-  // check the buffer length if it is nonempty read the bytes from buffer first
-  // before doing a recv on the communicator
-  if (mpi_stream->buffer != NULL && (mpi_stream->buff_len - mpi_stream->cur_ptr) >= min_bytes){
-    printf("%d. what is in the buffer %s\n",timeout_msec, mpi_stream->buffer);
-    // iov_len is the amount of bytes it wants to read
-    // at the moment it seems iov_len and min_bytes are equal in value
-    // from mongoc-stream.c implementation
-    memcpy (mpi_stream->buffer, (char*) iov[0].iov_base, iov[0].iov_len);
-    mpi_stream->cur_ptr += iov[0].iov_len;
-    if (mpi_stream->cur_ptr >= mpi_stream->buff_len){
-      mpi_stream->cur_ptr = 0;
-      mpi_stream->buff_len = 0;
-      free(mpi_stream->buffer);
-      mpi_stream->buffer = NULL;
+
+  // 1st step read buffered remainder msg if it exists
+  if (mpi_stream->buffer != NULL){
+    int bytes_left;
+    bytes_left = mpi_stream->buff_len - mpi_stream->cur_ptr;
+    char* cur_buf = mpi_stream->buffer + mpi_stream->cur_ptr;
+    
+    // reads part of the buffer
+    if (bytes_left > iov[0].iov_len){
+        memcpy ((char*) iov[0].iov_base,cur_buf, iov[0].iov_len);
+
+        nread += iov[0].iov_len;
+        mpi_stream->cur_ptr += iov[0].iov_len;
+
+        printf("1. copy is %s\n",iov[0].iov_base);
+        return nread;
     }
-  }
-  else {
-    printf("%d. i am here waiting\n",timeout_msec);
-    // read the iov_len (this is the amount of bytes it wants to read)
-    // store the rest of the message in a buffer
-    MPI_Status probeStatus;
-    MPI_Probe(MPI_ANY_SOURCE,
-              MPI_ANY_TAG,
-              mpi_stream->comm,
-              &probeStatus);
-
-    printf("%d. i am through here\n",timeout_msec);
-
-    int mpiLen;
-    MPI_Get_count(&probeStatus, MPI_CHAR, &mpiLen);
-
-    if (mpiLen > iov[0].iov_len) {
-      mpi_stream->buffer = malloc(mpiLen);
-      mpi_stream->buff_len = mpiLen;
-      nread = mongoc_mpi_recv(mpi_stream->comm, mpi_stream->buffer, mpiLen, expire_at);
-      mpi_stream->cur_ptr = nread;
-      memcpy(mpi_stream->buffer,iov[0].iov_base, iov[0].iov_len);
-    }
+    // reads the remainder
     else {
-      nread = mongoc_mpi_recv(mpi_stream->comm, (char *)iov[0].iov_base, iov[0].iov_len, expire_at);
+        memcpy((char*) iov[0].iov_base, cur_buf, bytes_left);
+        
+        nread += bytes_left;
+
+        // free the buffer since we have read everything in it
+        mpi_stream->cur_ptr = 0;
+        mpi_stream->buff_len = 0;
+        free(mpi_stream->buffer);
+        mpi_stream->buffer = NULL;
+
+        printf("2. copy is %s\n",iov[0].iov_base);
+
+        // if this read satisfied the total size of the buffer we return
+        if (bytes_left == iov[0].iov_len) {
+            return nread;
+        }
     }
   }
-
-  RETURN(nread);
+  return _mongoc_stream_mpi_probe_read(mpi_stream,iov,iovcnt,min_bytes,expire_at,nread);
 }
 
 

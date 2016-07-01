@@ -167,21 +167,38 @@ mongoc_mpi_check_closed (MPI_Comm comm) /* IN */
    int errors = 0;
    int ret;
    int probe_flag;
+   int remote_size;
+   int local_size;
+   int is_intercom;
    MPI_Status probeStatus;
 
-   ret = MPI_Probe(MPI_ANY_SOURCE,
-              MPI_ANY_TAG,
-              comm,
-              &probeStatus);
-
-   // 0 means there is no error message so it isn't closed
-   if (ret == 0){
-    return false;
-   }
-   else {
+   ret = MPI_Comm_test_inter(comm, &is_intercom);
+   if (ret != MPI_SUCCESS){
     return true;
    }
 
+   if (is_intercom){
+    ret = MPI_Comm_remote_size(comm, &remote_size);
+    if (remote_size <= 0||ret != MPI_SUCCESS){
+      return true;
+    }
+   }
+
+   ret = MPI_Comm_size(comm,&local_size);
+   if (local_size <= 0||ret != MPI_SUCCESS){
+    return true;
+   }
+
+   ret = MPI_Iprobe(MPI_ANY_SOURCE,
+              MPI_ANY_TAG,
+              comm,
+              &probe_flag,
+              &probeStatus);
+
+   if (ret != MPI_SUCCESS){
+    return true;
+   }
+   return false;
 }
 
 ssize_t
