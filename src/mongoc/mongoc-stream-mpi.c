@@ -134,79 +134,78 @@ _mongoc_stream_mpi_probe_read (mongoc_stream_mpi_t* mpi_stream,
   int probe_flag;
   int ret;
   MPI_Status probeStatus;
-  
+
+    
   int nread = bytes_read;
-
-  if (nread > 0){
-        ret = MPI_Iprobe(MPI_ANY_SOURCE,
-                MPI_ANY_TAG,
-                mpi_stream->comm,
-                &probe_flag,
-                &probeStatus);
-
-    // since it has already recieved some number of bytes it will return what it currently
-    // has read, probe flag states if there is something to read return value 0 if no error.
-
-    // Base Case 1 - if no message available and has read bytes return
-    if (ret < 0 ||(ret == 0 && !probe_flag)) {
-        return nread;
-    }
-  }
-
-  // otherwise it will probe (blocking recv) since it hasn't recieved any bytes yet
-  // TODO to implement timeout you would while loop here until the timeout time
-  else {
-        ret = MPI_Probe(MPI_ANY_SOURCE,
-                  MPI_ANY_TAG,
-                  mpi_stream->comm,
-                  &probeStatus);
-  }
-
-  // 3rd step if we are here there is a msg to read
-  int mpiLen;
-  MPI_Get_count(&probeStatus, MPI_CHAR, &mpiLen);
-
+    
+  // offset of the base of the buffer for each iteration of the loop
+  char* new_base = ((char *)iov[0].iov_base) + nread;
   // remaining bytes in the read buffer
   int bytes_to_read = iov[0].iov_len - nread;
-  
-  // 4th step buffer to the global bufferstream the leftover of the msg
-  // since the total number of bytes to read is done we return.
 
-  // Base Case 2 - if iov buffer is full return
-  if (bytes_to_read == 0){
-    return nread;
-  }
-  else if (mpiLen > bytes_to_read) {
-    mpi_stream->buffer = malloc(mpiLen);
-    mpi_stream->buff_len = mpiLen;
-    mongoc_mpi_recv(mpi_stream->comm, mpi_stream->buffer, mpiLen, expire_at);
+  while (bytes_to_read > 0){
+      if (nread > 0){
+            ret = MPI_Iprobe(MPI_ANY_SOURCE,
+                    MPI_ANY_TAG,
+                    mpi_stream->comm,
+                    &probe_flag,
+                    &probeStatus);
 
-    memcpy((char*) iov[0].iov_base, mpi_stream->buffer,bytes_to_read);
+        // since it has already recieved some number of bytes it will return what it currently
+        // has read, probe flag states if there is something to read return value 0 if no error.
 
-    // add bytes of msg read to the nreads what is memcpy'd
-    nread += bytes_to_read;
-    mpi_stream->cur_ptr = nread;
+        // Base Case 2 - if no message available and has read bytes return
+        if (ret < 0 ||(ret == 0 && !probe_flag)) {
+            return nread;
+        }
+      }
 
-    printf("3. copy is %s\n",iov[0].iov_base);
+      // otherwise it will probe (blocking recv) since it hasn't recieved any bytes yet
+      // TODO to implement timeout you would while loop here until the timeout time
+      else {
+            ret = MPI_Probe(MPI_ANY_SOURCE,
+                      MPI_ANY_TAG,
+                      mpi_stream->comm,
+                      &probeStatus);
+      }
 
-    return nread;
-  }
-  else {
-    char* new_base = ((char *)iov[0].iov_base) + nread;
-    ret = mongoc_mpi_recv(mpi_stream->comm, new_base, iov[0].iov_len, expire_at);
-    if (ret <= 0){
+      // 3rd step if we are here there is a msg to read
+      int mpiLen;
+      MPI_Get_count(&probeStatus, MPI_CHAR, &mpiLen);
+      
+      // 4th step buffer to the global bufferstream the leftover of the msg
+      // since the total number of bytes to read is done we return.
 
-        // TODO error handling here not sure what to do yet
-        printf("there is an error\n");
+      if (mpiLen > bytes_to_read) {
+        mpi_stream->buffer = malloc(mpiLen);
+        mpi_stream->buff_len = mpiLen;
+        mongoc_mpi_recv(mpi_stream->comm, mpi_stream->buffer, mpiLen, expire_at);
+
+        memcpy((char*) iov[0].iov_base, mpi_stream->buffer,bytes_to_read);
+
+        // add bytes of msg read to the nreads what is memcpy'd
+        nread += bytes_to_read;
+        mpi_stream->cur_ptr = nread;
+
+        printf("3. copy is %s\n",iov[0].iov_base);
+
+        return nread;
+      }
+      else {
+        ret = mongoc_mpi_recv(mpi_stream->comm, new_base, iov[0].iov_len, expire_at);
+        if (ret <= 0){
+
+            // TODO error handling here not sure what to do yet
+            printf("there is an error\n");
+        }
+
+        // update to the new state
+        nread+=ret;
+        new_base = ((char *)iov[0].iov_base) + nread;
+        bytes_to_read = iov[0].iov_len - nread;
     }
-    nread+=ret;
-    
-    printf("\n 4. we are reading recursively %s with nread at %zd \n",(char*)iov[0].iov_base, nread);
-
-    // recursively call to read mimick a stream by continously reading further messages
-    // return nread;
-    return _mongoc_stream_mpi_probe_read(mpi_stream,iov,iovcnt,min_bytes,expire_at,nread);
   }
+  return nread;
 }
 
 

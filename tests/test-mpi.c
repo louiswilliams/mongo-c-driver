@@ -56,13 +56,12 @@ sendv_test2_server(mongoc_stream_t * stream){
 
    printf("test 2 server begin\n");
 
-   char buf[9] = {0};
    char cmpbuf[9] = "pingpong";
    ssize_t r;
 
    for (int i=1;i <= 9;i++){
       ssize_t len_read = 0;
-      
+      char buf[9] = {0};
       while (len_read < 9){
          mongoc_iovec_t iov;
          iov.iov_base = buf + len_read;
@@ -103,8 +102,6 @@ sendv_test3_client(mongoc_stream_t * stream){
          iov.iov_base = buf + len_write;
          iov.iov_len = fmin(i,sizeof(buf) - len_write);
          len_write += mongoc_stream_writev(stream,&iov, 1, TIMEOUT);
-
-         printf("client sent out char %c and %zd bytes\n",*(char*)(iov.iov_base),iov.iov_len);
       }
 
       MPI_Barrier(mpi_stream->comm);
