@@ -50,6 +50,15 @@ get_expiration (int32_t timeout_msec)
 }
 
 
+static void
+_mongoc_stream_mpi_free_buffer(mongoc_stream_mpi_t *mpi_stream){
+  mpi_stream->cur_ptr = 0;
+  mpi_stream->buff_len = 0;
+  free(mpi_stream->buffer);
+  mpi_stream->buffer = NULL;
+}
+
+
 /* there is no way to close a communicator */
 static int
 _mongoc_stream_mpi_close (mongoc_stream_t *stream)
@@ -245,46 +254,37 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
   expire_at = get_expiration(timeout_msec);
 
   // 1st step read buffered remainder msg if it exists
-  if (mpi_stream->buffer != NULL){
-    int bytes_left;
-    bytes_left = mpi_stream->buff_len - mpi_stream->cur_ptr;
+  if (mpi_stream->buffer == NULL){
+    return _mongoc_stream_mpi_probe_read(mpi_stream,iov,iovcnt,min_bytes,expire_at,nread);
+  }
+  else {
+    int remainder_bytes;
+    remainder_bytes = mpi_stream->buff_len - mpi_stream->cur_ptr;
 
     // move to the current position of the remainder of the message
-    char* cur_buf = &(mpi_stream->buffer[mpi_stream->cur_ptr]);
+    char* cur_stream_buf = &(mpi_stream->buffer[mpi_stream->cur_ptr]);
     
-    // reads part of the buffer
-    if (bytes_left > iov[0].iov_len){
-        memcpy ((char*) iov[0].iov_base,cur_buf, iov[0].iov_len);
+    int bytes_to_read = fmin(remainder_bytes,iov[0].iov_len);
+    
+    memcpy ((char*) iov[0].iov_base,cur_stream_buf,bytes_to_read);
 
-        nread += iov[0].iov_len;
-        mpi_stream->cur_ptr += iov[0].iov_len;
+    nread += bytes_to_read;
 
+    mpi_stream->cur_ptr += bytes_to_read;
+
+    if (remainder_bytes == bytes_to_read){
+        _mongoc_stream_mpi_free_buffer(mpi_stream);
+    }
+
+    if (nread >= iov->iov_len){
         printf("1. copy is %s\n",iov[0].iov_base);
         return nread;
     }
-    // reads the remainder
     else {
-        memcpy((char*) iov[0].iov_base, cur_buf, bytes_left);
-        
-        nread += bytes_left;
-
-        // free the buffer since we have read everything in it
-        mpi_stream->cur_ptr = 0;
-        mpi_stream->buff_len = 0;
-        free(mpi_stream->buffer);
-        mpi_stream->buffer = NULL;
-
-        printf("2. copy is %s\n",iov[0].iov_base);
-
-        // if this read satisfied the total size of the buffer we return
-        if (bytes_left == iov[0].iov_len) {
-            return nread;
-        }
+        return _mongoc_stream_mpi_probe_read(mpi_stream,iov,iovcnt,min_bytes,expire_at,nread);
     }
   }
-  return _mongoc_stream_mpi_probe_read(mpi_stream,iov,iovcnt,min_bytes,expire_at,nread);
 }
-
 
 static ssize_t
 _mongoc_stream_mpi_writev (mongoc_stream_t *stream,
