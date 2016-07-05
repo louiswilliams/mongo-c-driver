@@ -43,7 +43,6 @@ ssize_t mongoc_mpi_recv (MPI_Comm      comm,
 
     MPI_Status probeStatus;
 
-    printf("\n we have started probing\n");
     MPI_Probe(MPI_ANY_SOURCE,
               MPI_ANY_TAG,
               comm,
@@ -51,8 +50,6 @@ ssize_t mongoc_mpi_recv (MPI_Comm      comm,
 
     int msgLen;
     MPI_Get_count(&probeStatus, MPI_CHAR, &msgLen);
-
-    printf("\n we have gotten through probing\n");
 
     if (msgLen > buflen) {
         // How do we throw errors?
@@ -83,7 +80,6 @@ ssize_t mongoc_mpi_sendv (MPI_Comm          comm,
     if (iovcnt == 1){
         int r = MPI_Send(iov[0].iov_base, iov[0].iov_len,MPI_CHAR,0,0,comm);
         assert(r == 0);
-        printf("we sent out %s and length %zu\n",iov[0].iov_base,iov[0].iov_len);
         RETURN(iov[0].iov_len);
     }
     else {

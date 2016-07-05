@@ -136,6 +136,7 @@ _mongoc_stream_mpi_probe_read (mongoc_stream_mpi_t* mpi_stream,
   MPI_Status probeStatus;
   
   int nread = bytes_read;
+
   if (nread > 0){
         ret = MPI_Iprobe(MPI_ANY_SOURCE,
                 MPI_ANY_TAG,
@@ -172,7 +173,10 @@ _mongoc_stream_mpi_probe_read (mongoc_stream_mpi_t* mpi_stream,
   // since the total number of bytes to read is done we return.
 
   // Base Case 2 - if iov buffer is full return
-  if (mpiLen > bytes_to_read) {
+  if (bytes_to_read == 0){
+    return nread;
+  }
+  else if (mpiLen > bytes_to_read) {
     mpi_stream->buffer = malloc(mpiLen);
     mpi_stream->buff_len = mpiLen;
     mongoc_mpi_recv(mpi_stream->comm, mpi_stream->buffer, mpiLen, expire_at);
@@ -188,9 +192,19 @@ _mongoc_stream_mpi_probe_read (mongoc_stream_mpi_t* mpi_stream,
     return nread;
   }
   else {
-    nread += mongoc_mpi_recv(mpi_stream->comm, (char *)iov[0].iov_base, iov[0].iov_len, expire_at);
+    char* new_base = ((char *)iov[0].iov_base) + nread;
+    ret = mongoc_mpi_recv(mpi_stream->comm, new_base, iov[0].iov_len, expire_at);
+    if (ret <= 0){
+
+        // TODO error handling here not sure what to do yet
+        printf("there is an error\n");
+    }
+    nread+=ret;
     
+    printf("\n 4. we are reading recursively %s with nread at %zd \n",(char*)iov[0].iov_base, nread);
+
     // recursively call to read mimick a stream by continously reading further messages
+    // return nread;
     return _mongoc_stream_mpi_probe_read(mpi_stream,iov,iovcnt,min_bytes,expire_at,nread);
   }
 }
@@ -235,6 +249,8 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
   if (mpi_stream->buffer != NULL){
     int bytes_left;
     bytes_left = mpi_stream->buff_len - mpi_stream->cur_ptr;
+
+    // move to the current position of the remainder of the message
     char* cur_buf = mpi_stream->buffer + mpi_stream->cur_ptr;
     
     // reads part of the buffer

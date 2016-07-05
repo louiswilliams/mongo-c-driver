@@ -2,7 +2,9 @@
 #include <fcntl.h>
 #include <mongoc.h>
 
+#include "mongoc-stream-mpi.c"
 #include "mongoc-stream-mpi.h"
+
 #include "mongoc-socket-private.h"
 #include "mongoc-thread-private.h"
 #include "mongoc-errno-private.h"
@@ -11,6 +13,134 @@
 
 #define TIMEOUT 10000
 #define WAIT 1000
+
+
+
+/* Test 2 - Single Message - Multiple Reads
+ *
+ * The server will read from the stream 1->(n = number of chars)
+ * number of bytes to extract the message.
+ * This will test mimicking a stream reads by segmenting a single message
+ */
+
+static void*
+sendv_test2_client(mongoc_stream_t * stream){
+   
+   mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
+   MPI_Barrier(mpi_stream->comm);
+
+   printf("test 2 client begin\n");
+
+   char buf[9] = {0};
+   ssize_t r;
+
+   mongoc_iovec_t iov;
+   iov.iov_base = buf;
+   iov.iov_len = sizeof (buf);
+
+
+   strcpy(buf,"pingpong");
+   
+   for (int i = 1; i<=9 ;i++){
+      r = mongoc_stream_writev(stream,&iov,1,TIMEOUT);
+      MPI_Barrier(mpi_stream->comm);
+   }
+   return NULL;
+}
+
+static void*
+sendv_test2_server(mongoc_stream_t * stream){
+   
+   mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
+   MPI_Barrier(mpi_stream->comm);
+
+   printf("test 2 server begin\n");
+
+   char buf[9] = {0};
+   char cmpbuf[9] = "pingpong";
+   ssize_t r;
+
+   for (int i=1;i <= 9;i++){
+      ssize_t len_read = 0;
+      
+      while (len_read < 9){
+         mongoc_iovec_t iov;
+         iov.iov_base = buf + len_read;
+         iov.iov_len = fmin(i,sizeof(buf) - len_read);
+         len_read += mongoc_stream_readv (stream, &iov, 1,iov.iov_len,TIMEOUT);
+      }
+
+      printf("%zd. this iter is %s\n",i,buf);
+
+      assert(r == 9);
+      assert (memcmp (buf,cmpbuf,9) == 0);
+      MPI_Barrier(mpi_stream->comm);
+   }
+
+   return NULL;
+}
+
+/* Test 3 - Multiple Message - Single Read
+ * Sending segmented messsages. All messages will be sent before the single recv
+ * A single stream read reading through multiple segmented messages */
+static void*
+sendv_test3_client(mongoc_stream_t * stream){
+   
+   mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
+   MPI_Barrier(mpi_stream->comm);
+
+   printf("\n test 3 begin client\n");
+   
+   char buf[9] = {0};
+   ssize_t r;
+
+   strcpy(buf,"pingpong");
+   
+   for (int i = 1; i<=9 ;i++){
+      ssize_t len_write = 0;
+      while (len_write < 9){
+         mongoc_iovec_t iov;
+         iov.iov_base = buf + len_write;
+         iov.iov_len = fmin(i,sizeof(buf) - len_write);
+         len_write += mongoc_stream_writev(stream,&iov, 1, TIMEOUT);
+
+         printf("client sent out char %c and %zd bytes\n",*(char*)(iov.iov_base),iov.iov_len);
+      }
+
+      MPI_Barrier(mpi_stream->comm);
+   }
+   return NULL;
+}
+
+static void*
+sendv_test3_server(mongoc_stream_t * stream){
+
+   mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
+   MPI_Barrier(mpi_stream->comm);
+
+   printf("\n test 3 begin server\n");
+
+   char cmpbuf[9] = "pingpong";
+   ssize_t r;
+
+
+   for (int i=1;i <= 9;i++){
+      MPI_Barrier(mpi_stream->comm);
+      char buf[9] = {0};
+      mongoc_iovec_t iov;
+      iov.iov_base = buf;
+      iov.iov_len = sizeof(buf);
+
+      r = mongoc_stream_readv (stream, &iov, 1, iov.iov_len, TIMEOUT);
+      printf("%zd. this iter is %s with bytes read of %zd \n",i,buf,r);
+
+      assert(r == 9);
+      assert (memcmp (buf,cmpbuf,9) == 0);
+   }
+
+   return NULL;
+}
+
 
 static void*
 sendv_test_server () 
@@ -52,71 +182,22 @@ sendv_test_server ()
 
    stream = mongoc_stream_mpi_new (intercom);
 
-   r = mongoc_stream_readv (stream, &iov, 1, 5, TIMEOUT);
-   assert (r == 5);
-   assert (strcmp (buf, "ping") == 0);
+   // r = mongoc_stream_readv (stream, &iov, 1, 5, TIMEOUT);
+   // assert (r == 5);
+   // assert (strcmp (buf, "ping") == 0);
 
-   strcpy (buf, "pong");
+   // strcpy (buf, "pong");
 
-   printf("\n server sending out %s\n",buf);
+   // r = mongoc_stream_writev (stream, &iov, 1, TIMEOUT);
+   // assert (r == 5);
 
-   r = mongoc_stream_writev (stream, &iov, 1, TIMEOUT);
-   assert (r == 5);
+   sendv_test2_server(stream);
 
-   printf("\n server is past writing\n");
+   sendv_test3_server(stream);
 
    mongoc_stream_destroy (stream);
    return NULL;
 }
-
-/* Testing stream functionality sending 1 message and recieving it 
- * through 1->n bytes per read.
- */
-static void*
-sendv_test2_client(mongoc_stream_t * stream){
-   char buf[9];
-   ssize_t r;
-
-   mongoc_iovec_t iov;
-   iov.iov_base = buf;
-   iov.iov_len = sizeof (buf);
-
-
-   strcpy(buf,"pingpong");
-   
-   for (int i = 1; i<=9 ;i++){
-      r = mongoc_stream_writev(stream,&iov,1,TIMEOUT);
-   }
-   return NULL;
-}
-
-/* The server will read from the stream 1->n (number of chars)
- * number of bytes to extract the message */
-static void*
-sendv_test2_server(mongoc_stream_t * stream){
-   char buf[9];
-   ssize_t r;
-
-   for (int i=1;i <= 9;i++){
-      ssize_t len_read = 0;
-
-      while (len_read < 9){    
-         mongoc_iovec_t iov;
-         iov.iov_base = buf + len_read;
-         iov.iov_len = i;
-         len_read += mongoc_stream_readv (stream, &iov, 1, i, TIMEOUT);
-         len_read+=i;
-      }
-
-      printf("this iter is %s\n",buf);
-
-      assert(r == 9);
-      assert (strcmp (buf, "pingpong") == 0);
-   }
-
-   return NULL;
-}
-
 /* Testing stream readv timeout after n seconds */
 
 
@@ -161,20 +242,22 @@ sendv_test_client ()
 
    close(conn_sock);
 
-   closed = mongoc_stream_check_closed(stream);
-   assert (closed == false);
+   // closed = mongoc_stream_check_closed(stream);
+   // assert (closed == false);
 
-   r = mongoc_stream_writev(stream,&iov, 1 ,TIMEOUT);
-   assert (r == 5);
+   // r = mongoc_stream_writev(stream,&iov, 1 ,TIMEOUT);
+   // assert (r == 5);
 
-   closed = mongoc_stream_check_closed (stream);
-   assert (closed == false);
+   // closed = mongoc_stream_check_closed (stream);
+   // assert (closed == false);
 
-   printf("\n client is recieving\n");
+   // r = mongoc_stream_readv (stream, &iov, 1, 5, 2);
+   // assert (r == 5);
+   // assert (strcmp (buf, "pong") == 0);
 
-   r = mongoc_stream_readv (stream, &iov, 1, 5, 2);
-   assert (r == 5);
-   assert (strcmp (buf, "pong") == 0);
+   sendv_test2_client(stream);
+
+   sendv_test3_client(stream);
 
    mongoc_stream_destroy (stream);
 
