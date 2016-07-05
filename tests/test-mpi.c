@@ -1,6 +1,8 @@
+#include <stdlib.h>
 #include <mpi.h>
 #include <fcntl.h>
 #include <mongoc.h>
+#include <time.h>
 
 #include "mongoc-stream-mpi.c"
 #include "mongoc-stream-mpi.h"
@@ -24,7 +26,7 @@
  */
 
 static void*
-sendv_test2_client(mongoc_stream_t * stream){
+sendv_test2_client(mongoc_stream_t* stream){
    
    mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
    MPI_Barrier(mpi_stream->comm);
@@ -49,7 +51,7 @@ sendv_test2_client(mongoc_stream_t * stream){
 }
 
 static void*
-sendv_test2_server(mongoc_stream_t * stream){
+sendv_test2_server(mongoc_stream_t* stream){
    
    mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
    MPI_Barrier(mpi_stream->comm);
@@ -83,7 +85,7 @@ sendv_test2_server(mongoc_stream_t * stream){
  * Sending segmented messsages. All messages will be sent before the single recv
  * A single stream read reading through multiple segmented messages */
 static void*
-sendv_test3_client(mongoc_stream_t * stream){
+sendv_test3_client(mongoc_stream_t* stream){
    
    mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
    MPI_Barrier(mpi_stream->comm);
@@ -110,7 +112,7 @@ sendv_test3_client(mongoc_stream_t * stream){
 }
 
 static void*
-sendv_test3_server(mongoc_stream_t * stream){
+sendv_test3_server(mongoc_stream_t* stream){
 
    mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
    MPI_Barrier(mpi_stream->comm);
@@ -135,6 +137,80 @@ sendv_test3_server(mongoc_stream_t * stream){
       assert (memcmp (buf,cmpbuf,9) == 0);
    }
 
+   return NULL;
+}
+
+static void*
+sendv_test4_server(mongoc_stream_t* stream){
+   mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
+   MPI_Barrier(mpi_stream->comm);
+
+   time_t t;
+   srand((unsigned) time(&t)+100);
+
+   printf("\n test 4 begin server\n");
+
+   char cmpbuf[9] = "pingpong";
+
+   for (int i=1;i<=9;i++){
+      int len_read = 0;
+      char buf[9] = {0};
+      while (len_read < 9){
+         mongoc_iovec_t iov;
+         iov.iov_base = &(buf[len_read]);
+
+         int rand_num = (rand() % 9) + 1;
+         iov.iov_len = fmin(sizeof(buf) - len_read,rand_num);
+         len_read += mongoc_stream_readv (stream, &iov, 1,iov.iov_len,TIMEOUT);
+
+         printf("%zd. SERVER: string is currently %s after recieving %zd bytes.\n",i,buf,len_read);
+      }
+
+      printf("%zd. this iter is %s\n",i,buf);
+      assert(len_read == 9);
+      assert (memcmp (buf,cmpbuf,9) == 0);
+   }
+
+   MPI_Barrier(mpi_stream->comm);
+   return NULL;
+}
+
+static void*
+sendv_test4_client(mongoc_stream_t* stream){
+   mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
+   MPI_Barrier(mpi_stream->comm);
+
+   time_t t;
+   srand((unsigned) time(&t));
+
+   printf("\n test 4 begin client\n");
+
+   char buf[9] = {0};
+   ssize_t r;
+
+   strcpy(buf,"pingpong");
+   
+   for (int i = 1; i<=9 ;i++){
+      ssize_t len_write = 0;
+      while (len_write < 9){
+         mongoc_iovec_t iov;
+         iov.iov_base = &(buf[len_write]);
+
+         int prev_len = len_write;
+
+         int rand_num = (rand() % 9) + 1;
+         iov.iov_len = fmin(rand_num,sizeof(buf) - len_write);
+         len_write += mongoc_stream_writev(stream,&iov, 1, TIMEOUT);
+
+         // printf("\n%zd. CLIENT: sent string is ",i);
+         // for (int j=prev_len;j<len_write;j++){
+         //    printf("%c",buf[j]);
+         // }
+         // printf(" after sending %zd bytes.\n",len_write);
+      }
+   }
+
+   MPI_Barrier(mpi_stream->comm);
    return NULL;
 }
 
@@ -188,9 +264,11 @@ sendv_test_server ()
    // r = mongoc_stream_writev (stream, &iov, 1, TIMEOUT);
    // assert (r == 5);
 
-   sendv_test2_server(stream);
+   // sendv_test2_server(stream);
 
-   sendv_test3_server(stream);
+   // sendv_test3_server(stream);
+
+   sendv_test4_server(stream);
 
    mongoc_stream_destroy (stream);
    return NULL;
@@ -252,9 +330,11 @@ sendv_test_client ()
    // assert (r == 5);
    // assert (strcmp (buf, "pong") == 0);
 
-   sendv_test2_client(stream);
+   // sendv_test2_client(stream);
 
-   sendv_test3_client(stream);
+   // sendv_test3_client(stream);
+
+   sendv_test4_client(stream);
 
    mongoc_stream_destroy (stream);
 

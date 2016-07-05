@@ -185,9 +185,10 @@ _mongoc_stream_mpi_probe_read (mongoc_stream_mpi_t* mpi_stream,
 
         // add bytes of msg read to the nreads what is memcpy'd
         nread += bytes_to_read;
-        mpi_stream->cur_ptr = nread;
+        mpi_stream->cur_ptr = bytes_to_read;
 
         printf("3. copy is %s\n",iov[0].iov_base);
+        printf("3. read into buffer is %s\n",mpi_stream->buffer);
 
         return nread;
       }
@@ -236,6 +237,8 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
   ssize_t nread = 0;
   int ret;
 
+  int bytes_left;
+
   ENTRY;
 
   BSON_ASSERT(mpi_stream);
@@ -246,11 +249,10 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
 
   // 1st step read buffered remainder msg if it exists
   if (mpi_stream->buffer != NULL){
-    int bytes_left;
     bytes_left = mpi_stream->buff_len - mpi_stream->cur_ptr;
 
     // move to the current position of the remainder of the message
-    char* cur_buf = mpi_stream->buffer + mpi_stream->cur_ptr;
+    char* cur_buf = (char*)(mpi_stream->buffer) + mpi_stream->cur_ptr;
     
     // reads part of the buffer
     if (bytes_left > iov[0].iov_len){
@@ -276,13 +278,16 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
 
         printf("2. copy is %s\n",iov[0].iov_base);
 
-        // if this read satisfied the total size of the buffer we return
-        if (bytes_left == iov[0].iov_len) {
-            return nread;
-        }
     }
   }
-  return _mongoc_stream_mpi_probe_read(mpi_stream,iov,iovcnt,min_bytes,expire_at,nread);
+  
+  // if this read satisfied the total size of the buffer we return
+  if (bytes_left == iov[0].iov_len) {
+    return nread;
+  }
+  else {
+    return _mongoc_stream_mpi_probe_read(mpi_stream,iov,iovcnt,min_bytes,expire_at,nread);
+  }
 }
 
 
