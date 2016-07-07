@@ -29,6 +29,17 @@
 #undef MONGOC_LOG_DOMAIN
 #define MONGOC_LOG_DOMAIN "mpi"
 
+static BSON_INLINE int64_t
+get_expiration (int32_t timeout_msec)
+{
+   if (timeout_msec < 0) {
+      return -1;
+   }
+   else {
+      return (bson_get_monotonic_time () + ((int64_t)timeout_msec * 1000L));
+   }
+}
+
 ssize_t mongoc_mpi_recv (MPI_Comm      comm,
                          void         *buf,
                          size_t        buflen,
@@ -111,12 +122,12 @@ ssize_t mongoc_mpi_sendv (MPI_Comm          comm,
 
 static bool
 _mongoc_mpi_wait (MPI_Comm          comm,          /* IN */
-                  int64_t           expire_at,
+                  int32_t           timeout,
                   int*              errors)      /* IN */
 {
    int ret;
-   int timeout;
    int64_t now;
+   int64_t expire_at;
 
    int probe_flag;
    MPI_Status probeStatus;
@@ -124,36 +135,34 @@ _mongoc_mpi_wait (MPI_Comm          comm,          /* IN */
    ENTRY;
 
    now = bson_get_monotonic_time();
+   expire_at = get_expiration(timeout);
 
-   for (;;) {
+   while ((now <= expire_at) || (expire_at < 0)) {
       ret = MPI_Iprobe(MPI_ANY_SOURCE,
               MPI_ANY_TAG,
               comm,
               &probe_flag,
               &probeStatus);
 
-      if (ret > 0 && probe_flag) {
+      if (probe_flag){
+        printf("there is a message\n");
+      }
+      // mpi_sucess is just 0
+      if (ret >= 0 && probe_flag) {
          /* there is a msg to recieve, */
          RETURN (true);
       } 
       /* error failure of the iprobe */
       else if (ret < 0){
         *errors |= POLLERR;
-        return (false);
+        RETURN (false);
       }
       /* flag false means nothing received inbound */
       else {
          now = bson_get_monotonic_time();
-         /* probe itself failed */
-          if (expire_at < now) {
-             RETURN (false);
-          } else {
-             continue;
-          }
-         /* poll timed out */
-         RETURN (false);
       }
    }
+   RETURN (false);
 }
 
 bool
@@ -200,7 +209,7 @@ mongoc_mpi_check_closed (MPI_Comm comm) /* IN */
 ssize_t
 mongoc_mpi_poll (mongoc_mpi_poll_t     *mpids,          /* IN */
                  size_t                n_mpids,         /* IN */
-                 int32_t               timeout)         /* IN */
+                 int32_t               timeout_msec)         /* IN */
 {
    int ret = 0;
    int i;
@@ -213,16 +222,20 @@ mongoc_mpi_poll (mongoc_mpi_poll_t     *mpids,          /* IN */
 
    BSON_ASSERT (mpids);
 
-   int now = bson_get_monotonic_time();
+   int64_t now = bson_get_monotonic_time();
+   int64_t expire_at = get_expiration (timeout_msec);
 
-   while (now <= timeout){
+   // expire_at = -1 causes it to loop forever
+   while ((now <= expire_at) || (expire_at < 0)) {
+
+    // printf("now:%zd expires:%zd\n",now,expire_at);
     num_events = 0;
 
     // check all mpi_ds nonblockingly for each event
     for (i =0; i < n_mpids; i++){
       
       // can it nonblock recieve
-      // i am assuming recieving normal and priority is the same in mpi
+      // i am assuming recieving normal and priority (POLLIN and POLLPRI) is the same in mpi
       int errors = 0;
 
       if (mpids->events & (POLLIN|POLLPRI)) {
@@ -230,10 +243,12 @@ mongoc_mpi_poll (mongoc_mpi_poll_t     *mpids,          /* IN */
         if (ret){
             mpids[i].revents |= (POLLIN & mpids->events);
             mpids[i].revents |= (POLLPRI & mpids->events);
+            printf("ERROR: we have found one\n");
         }
         else {
-          mpids[i].revents |= errors;
-          RETURN(-1);
+          printf("ERROR: mongoc-mpi 248 we have an error in waiting\n");
+          // mpids[i].revents |= errors;
+          // RETURN(-1);
         }
       }
 

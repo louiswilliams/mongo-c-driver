@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2016 MongoDB, Inc.
  *
@@ -25,6 +26,14 @@
 
 #undef MONGOC_LOG_DOMAIN
 #define MONGOC_LOG_DOMAIN "stream"
+
+// #define DEBUG
+
+#ifdef DEBUG
+#define DEBUG_PRINT(fmt, args...)    printf(stderr, fmt, ## args)
+#else
+#define DEBUG_PRINT(fmt, args...)    /* Don't do anything in release builds */
+#endif
 
 
 struct _mongoc_stream_mpi_t
@@ -114,8 +123,7 @@ _mongoc_stream_mpi_setsockopt (mongoc_stream_t *stream,
 }
 
 
-/** atm we are not buffering and mpi is a message interface so not idea
-  * of flushing a buffer */
+/** TODO not sure what to do for flush? possibly recieve all currently queued messages? */
 static int
 _mongoc_stream_mpi_flush (mongoc_stream_t *stream)
 {
@@ -148,7 +156,7 @@ _mongoc_stream_mpi_probe_read (mongoc_stream_mpi_t* mpi_stream,
   int nread = bytes_read;
     
   // offset of the base of the buffer for each iteration of the loop
-  char* new_base = ((char *)iov[0].iov_base) + nread;
+  char* new_base = &(iov[0].iov_base[nread]);
   // remaining bytes in the read buffer
   int bytes_to_read = iov[0].iov_len - nread;
 
@@ -195,9 +203,6 @@ _mongoc_stream_mpi_probe_read (mongoc_stream_mpi_t* mpi_stream,
         // add bytes of msg read to the nreads what is memcpy'd
         nread += bytes_to_read;
         mpi_stream->cur_ptr = bytes_to_read;
-
-        printf("3. copy is %s\n",iov[0].iov_base);
-
         return nread;
       }
       else {
@@ -210,7 +215,7 @@ _mongoc_stream_mpi_probe_read (mongoc_stream_mpi_t* mpi_stream,
 
         // update to the new state
         nread+=ret;
-        new_base = ((char *)iov[0].iov_base) + nread;
+        new_base = &(iov[0].iov_base[nread]);
         bytes_to_read = iov[0].iov_len - nread;
     }
   }
@@ -272,12 +277,12 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
 
     mpi_stream->cur_ptr += bytes_to_read;
 
+    // free the streams buffer if all its bytes have been read
     if (remainder_bytes == bytes_to_read){
         _mongoc_stream_mpi_free_buffer(mpi_stream);
     }
 
     if (nread >= iov->iov_len){
-        printf("1. copy is %s\n",iov[0].iov_base);
         return nread;
     }
     else {
@@ -306,10 +311,12 @@ _mongoc_stream_mpi_poll (mongoc_stream_poll_t *streams,
                             int32_t               timeout_msec)
 
 {
+
+
   // for each stream cast to a mpi stream and check their events for some timeout
   int i;
   ssize_t ret = -1;
-  mongoc_mpi_poll_t *mpi_ds;
+  mongoc_mpi_poll_t *mpi_ds = malloc(sizeof(mongoc_mpi_poll_t));
   mongoc_stream_mpi_t *mpi_stream;
 
   for (i=0; i < nstreams; i++){
@@ -317,6 +324,7 @@ _mongoc_stream_mpi_poll (mongoc_stream_poll_t *streams,
 
     if (!mpi_stream->comm){
       // cleanup
+      printf("ERROR: Poll mongoc-stream-mpi 327\n");
       bson_free(mpi_ds);
       RETURN (ret);
     }
@@ -329,6 +337,7 @@ _mongoc_stream_mpi_poll (mongoc_stream_poll_t *streams,
   // check the buffer for pollin events to flag reads for th revents
 
   // call helper function that polls
+
   ret = mongoc_mpi_poll(mpi_ds,nstreams, timeout_msec);
 
   if (ret > 0){
