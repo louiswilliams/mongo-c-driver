@@ -14,7 +14,7 @@
 
 #include "test-libmongoc.h"
 
-#define TIMEOUT 10000
+#define TIMEOUT 20000
 #define WAIT 1000
 #define MAX_MESSAGE_SIZE 4096
 
@@ -531,6 +531,25 @@ retrieve_stream_polls(mongoc_stream_poll_t poll_list[4], int server_event[4]){
             assert((poll_list[i].events & POLLIN) != POLLIN);
             assert((server_event[i] & POLLIN) == POLLIN);
 
+            mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) poll_list[i].stream;
+
+            int ret;
+            int probe_flag;
+            MPI_Status probeStatus;
+            ret = MPI_Iprobe(MPI_ANY_SOURCE,
+            MPI_ANY_TAG,
+            mpi_stream->comm,
+            &probe_flag,
+            &probeStatus);
+            
+            if (probe_flag){
+                printf("MPI_POLL 334: it is there friends\n");
+            }
+            else {
+                printf("MPI_POLL 337: it is not there\n");
+                assert(false);
+            }
+
             r = mongoc_stream_readv (poll_list[i].stream, &iov, 1, 9, TIMEOUT);
             assert(r == 9);
             assert (memcmp (buf,cmpbuf,9) == 0);
@@ -622,7 +641,7 @@ poll_test3_client(){
             // make stream_poll struct based on client row
             create_mongoc_stream_poll_t_list(stream_list,pollin_table[clientRow],poll_list);
 
-            r = mongoc_stream_poll(poll_list,4,100);
+            r = mongoc_stream_poll(poll_list,4,TIMEOUT);
 
             printf("num events: %zd r: %zd \n",num_events,r);
 
@@ -632,8 +651,8 @@ poll_test3_client(){
             r = retrieve_stream_polls(poll_list,pollin_table[serverRow]);
 
             printf("num events retrieved : %zd r: %zd \n",num_events,r);
+            fflush(stdout);
 
-            assert(r == num_events);
         }
     }
 
