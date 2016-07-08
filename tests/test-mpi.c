@@ -631,13 +631,17 @@ poll_test3_client(){
             // retrieve all events that are found
             r = retrieve_stream_polls(poll_list,pollin_table[serverRow]);
 
-            assert(r == 0);
+            printf("num events retrieved : %zd r: %zd \n",num_events,r);
+
+            assert(r == num_events);
         }
     }
 
     for (int i = 0;i< 4;i++){
-        // mongoc_stream_destroy(stream_list[i]);
+        mongoc_stream_destroy(stream_list[i]);
     }
+
+    printf("CLIENT: done");
 
     return NULL;
 }
@@ -698,7 +702,7 @@ poll_send_server(void * argp){
         }
     }
 
-    printf("Done\n");
+    printf("SERVER: Done\n");
 
     MPI_Comm_free(&intercom);
     return NULL;
@@ -736,10 +740,10 @@ poll_test3_server(){
     r = generate_pollin_table_rec(pollin_table,permute_buf,4,4,0);
     assert(r == 16);
 
-    pthread_t threads[5];
+    pthread_t threads[4];
 
     // each server thread job is to send/not send each polling round to the client
-    for (int i = 0; i< 5;i++){
+    for (int i = 0; i< 4;i++){
         conn_sock = accept(listen_sock, (struct sockaddr *) &cli_addr,&clilen);
         assert (conn_sock);
 
@@ -756,7 +760,7 @@ poll_test3_server(){
         }
     }
 
-    for (int i =0;i< 5;i++){
+    for (int i =0;i< 4;i++){
         pthread_join(threads[i], NULL);
     }
 

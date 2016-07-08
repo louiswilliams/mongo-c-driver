@@ -112,7 +112,7 @@ ssize_t mongoc_mpi_sendv (MPI_Comm          comm,
             msg_tail+= iov[i].iov_len;
         }
 
-        MPI_Send(msg, bytes, MPI_CHAR, 0, MPI_ANY_TAG,comm);
+        MPI_Send(msg, bytes, MPI_CHAR, 0, 0,comm);
 
         free(msg);
 
