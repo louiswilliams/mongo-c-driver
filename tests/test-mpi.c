@@ -501,7 +501,7 @@ create_mongoc_stream_poll_t_list(mongoc_stream_t* stream_list[4],int client_even
 }
 
 static int
-retrieve_stream_polls(mongoc_stream_poll_t poll_list[4]){
+retrieve_stream_polls(mongoc_stream_poll_t poll_list[4], int server_event[4]){
 
     ssize_t r;
     mongoc_iovec_t iov;
@@ -517,10 +517,27 @@ retrieve_stream_polls(mongoc_stream_poll_t poll_list[4]){
         if (poll_list[i].revents == POLLIN){
             r = mongoc_stream_readv (poll_list[i].stream, &iov, 1, 9, TIMEOUT);
 
+            assert((server_event[i] & POLLIN) == POLLIN);
+            assert((poll_list[i].events & POLLIN) == POLLIN);
             assert(r == 9);
             assert (memcmp (buf,cmpbuf,9) == 0);
             count++;
         }
+
+        // this is to just read away the extraneous msg that came in when we weren't
+        // polling for it so we take out the message for the next round
+        else if (server_event[i] == POLLIN){
+            assert(poll_list[i].revents != POLLIN);
+            assert((poll_list[i].events & POLLIN) != POLLIN);
+            assert((server_event[i] & POLLIN) == POLLIN);
+
+            r = mongoc_stream_readv (poll_list[i].stream, &iov, 1, 9, TIMEOUT);
+            assert(r == 9);
+            assert (memcmp (buf,cmpbuf,9) == 0);
+        }
+
+        // we have to also read from the communicators that did not have pollin but had stuff
+        // sent to them by the server
 
         // this is to unblock the server so that it can send for the next row to poll
         iov.iov_base = cmpbuf;
@@ -612,7 +629,7 @@ poll_test3_client(){
             assert(r == num_events);
 
             // retrieve all events that are found
-            r = retrieve_stream_polls(poll_list);
+            r = retrieve_stream_polls(poll_list,pollin_table[serverRow]);
 
             assert(r == 0);
         }

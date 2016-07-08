@@ -345,7 +345,7 @@ _mongoc_stream_mpi_poll (mongoc_stream_poll_t *streams,
     }
   }
 
-  bson_free(mpi_ds);
+  free(mpi_ds);
   RETURN(ret);
 }
 

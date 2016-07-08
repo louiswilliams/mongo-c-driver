@@ -203,14 +203,36 @@ mongoc_mpi_check_closed (MPI_Comm comm) /* IN */
    return false;
 }
 
+int mongoc_mpi_count_events(int events){
+  int count = 0;
+  for(int i = 0; i < sizeof(int); i++) {
+    count += (events >> i) & 0x01; // Shift bit[i] to the first position, and mask off the remaining bits.
+  }
+  return count;
+}
+
+int
+mongoc_mpi_num_events(mongoc_mpi_poll_t     *mpids,          /* IN */
+                      size_t                n_mpids){
+  int count = 0;
+  for (int ids = 0; ids < n_mpids; ids++){
+    // count number of sete bits of the int
+    count += mongoc_mpi_count_events(mpids[ids].events);
+  }
+  return count;
+}
+
 ssize_t
 mongoc_mpi_poll (mongoc_mpi_poll_t     *mpids,          /* IN */
                  size_t                n_mpids,         /* IN */
                  int32_t               timeout_msec)         /* IN */
 {
+
    int ret = 0;
    int i;
-   int num_events;
+
+   int num_events = 0;
+   int num_event_comms = 0;
 
    int probe_flag;
    MPI_Status probeStatus;
@@ -222,11 +244,14 @@ mongoc_mpi_poll (mongoc_mpi_poll_t     *mpids,          /* IN */
    int64_t now = bson_get_monotonic_time();
    int64_t expire_at = get_expiration (timeout_msec);
 
+   int total_events = mongoc_mpi_num_events(mpids,n_mpids);
+
    // expire_at = -1 causes it to loop forever
    while ((now <= expire_at) || (expire_at < 0)) {
+    num_events = 0;
+    num_event_comms = 0;
 
     // printf("now:%zd expires:%zd\n",now,expire_at);
-    num_events = 0;
 
     // check all mpi_ds nonblockingly for each event
     for (i =0; i < n_mpids; i++){
@@ -238,11 +263,11 @@ mongoc_mpi_poll (mongoc_mpi_poll_t     *mpids,          /* IN */
       if (mpids[i].events & (POLLIN|POLLPRI)) {
         ret = _mongoc_mpi_wait(mpids[i].comm,0,&errors);
         if (ret){
-            mpids[i].revents |= (POLLIN & mpids->events);
-            mpids[i].revents |= (POLLPRI & mpids->events);
+            mpids[i].revents |= (POLLIN & mpids[i].events);
+            mpids[i].revents |= (POLLPRI & mpids[i].events);
         }
         else {
-          printf("ERROR: mongoc-mpi 248 we have an error in waiting\n");
+          // printf("ERROR: mongoc-mpi 248 we have an error in waiting\n");
           // mpids[i].revents |= errors;
           // RETURN(-1);
         }
@@ -253,14 +278,14 @@ mongoc_mpi_poll (mongoc_mpi_poll_t     *mpids,          /* IN */
         mpids[i].revents |= POLLOUT;
       }
 
-      // check if all events are satisfied
-      if (mpids[i].revents & mpids[i].events){
-        num_events+= 1;
+      // check if there has been an event on the mpids
+      if (mpids[i].revents){
+        num_event_comms += 1;
+        num_events += mongoc_mpi_count_events(mpids[i].revents);
       }
     }
-
     // stop checking if all events are satisfied
-    if (num_events == n_mpids){
+    if (num_events == total_events){
       break;
     }
     // update the current time for the timeout
@@ -268,14 +293,5 @@ mongoc_mpi_poll (mongoc_mpi_poll_t     *mpids,          /* IN */
       now = bson_get_monotonic_time();
     }
    }
-
-   // accumulate the number of elements in mpids arra that has
-   // events occurred
-   num_events = 0;
-   for (i = 0;i< n_mpids;i++){
-    if (mpids[i].revents > 0){
-      num_events++;
-    }
-   }
-   return num_events;
+   return num_event_comms;
 }
