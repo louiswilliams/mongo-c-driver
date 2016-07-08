@@ -38,7 +38,7 @@ sendv_test2_client(mongoc_stream_t* stream){
     mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
     MPI_Barrier(mpi_stream->comm);
 
-    printf("test 2 client begin\n");
+    //fprintf(stderr,"test 2 client begin\n");
 
     char buf[9] = {0};
     ssize_t r;
@@ -63,7 +63,7 @@ sendv_test2_server(mongoc_stream_t* stream){
     mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
     MPI_Barrier(mpi_stream->comm);
 
-    printf("test 2 server begin\n");
+    //fprintf(stderr,"test 2 server begin\n");
 
     char cmpbuf[9] = "pingpong";
     ssize_t r;
@@ -78,7 +78,7 @@ sendv_test2_server(mongoc_stream_t* stream){
             len_read += mongoc_stream_readv (stream, &iov, 1,iov.iov_len,TIMEOUT);
         }
 
-        printf("%zd. this iter is %s\n",i,buf);
+        //fprintf(stderr,"%zd. this iter is %s\n",i,buf);
 
         assert(r == 9);
         assert (memcmp (buf,cmpbuf,9) == 0);
@@ -96,7 +96,7 @@ sendv_test3_client(mongoc_stream_t* stream){
     mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
     MPI_Barrier(mpi_stream->comm);
 
-    printf("\n test 3 begin client\n");
+    //fprintf(stderr,"\n test 3 begin client\n");
 
     char buf[9] = {0};
     ssize_t r;
@@ -123,7 +123,7 @@ sendv_test3_server(mongoc_stream_t* stream){
     mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
     MPI_Barrier(mpi_stream->comm);
 
-    printf("\n test 3 begin server\n");
+    //fprintf(stderr,"\n test 3 begin server\n");
 
     char cmpbuf[9] = "pingpong";
     ssize_t r;
@@ -137,7 +137,7 @@ sendv_test3_server(mongoc_stream_t* stream){
         iov.iov_len = sizeof(buf);
 
         r = mongoc_stream_readv (stream, &iov, 1, iov.iov_len, TIMEOUT);
-        printf("%zd. this iter is %s with bytes read of %zd \n",i,buf,r);
+        //fprintf(stderr,"%zd. this iter is %s with bytes read of %zd \n",i,buf,r);
 
         assert(r == 9);
         assert (memcmp (buf,cmpbuf,9) == 0);
@@ -153,7 +153,7 @@ sendv_test4_server(mongoc_stream_t* stream){
     time_t t;
     srand((unsigned) time(&t)+100);
 
-    printf("\n test 4 begin server \n");
+    //fprintf(stderr,"\n test 4 begin server \n");
 
     char cmpbuf[9] = "pingpong";
 
@@ -168,10 +168,10 @@ sendv_test4_server(mongoc_stream_t* stream){
             iov.iov_len = fmin(sizeof(buf) - len_read,rand_num);
             len_read += mongoc_stream_readv (stream, &iov, 1,iov.iov_len,TIMEOUT);
 
-            printf("%zd. SERVER: string is currently %s after recieving %zd bytes.\n",i,buf,len_read);
+            //fprintf(stderr,"%zd. SERVER: string is currently %s after recieving %zd bytes.\n",i,buf,len_read);
         }
 
-        printf("%zd. this iter is %s\n",i,buf);
+        //fprintf(stderr,"%zd. this iter is %s\n",i,buf);
         assert(len_read == 9);
         assert (memcmp (buf,cmpbuf,9) == 0);
     }
@@ -188,7 +188,7 @@ sendv_test4_client(mongoc_stream_t* stream){
     time_t t;
     srand((unsigned) time(&t));
 
-    printf("\n test 4 begin client\n");
+    //fprintf(stderr,"\n test 4 begin client\n");
 
     char buf[9] = {0};
     ssize_t r;
@@ -208,11 +208,11 @@ sendv_test4_client(mongoc_stream_t* stream){
             iov.iov_len = fmin(rand_num,sizeof(buf) - len_write);
             len_write += mongoc_stream_writev(stream,&iov, 1, TIMEOUT);
 
-            printf("\n%zd. CLIENT: sent string is ",i);
+            //fprintf(stderr,"\n%zd. CLIENT: sent string is ",i);
             for (int j=prev_len;j<len_write;j++){
-                printf("%c",buf[j]);
+                //fprintf(stderr,"%c",buf[j]);
             }
-            printf(" after sending %zd bytes.\n",len_write);
+            //fprintf(stderr," after sending %zd bytes.\n",len_write);
         }
     }
 
@@ -233,7 +233,7 @@ poll_test1_client(mongoc_stream_t* stream){
     poller.events = POLLIN;
     poller.revents = 0;
 
-    printf("before\n");
+    //fprintf(stderr,"before\n");
     // will test if it timeout for 2 seconds
     r = mongoc_stream_poll(&poller,1,500);
 
@@ -244,7 +244,7 @@ poll_test1_client(mongoc_stream_t* stream){
 
     assert(r == 0);
 
-    printf("after\n");
+    //fprintf(stderr,"after\n");
 
     MPI_Barrier(mpi_stream->comm);
 
@@ -531,23 +531,26 @@ retrieve_stream_polls(mongoc_stream_poll_t poll_list[4], int server_event[4]){
             assert((poll_list[i].events & POLLIN) != POLLIN);
             assert((server_event[i] & POLLIN) == POLLIN);
 
-            mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) poll_list[i].stream;
+            mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t *)poll_list[i].stream;
 
             int ret;
             int probe_flag;
             MPI_Status probeStatus;
-            ret = MPI_Iprobe(MPI_ANY_SOURCE,
-            MPI_ANY_TAG,
-            mpi_stream->comm,
-            &probe_flag,
-            &probeStatus);
-            
-            if (probe_flag){
-                printf("MPI_POLL 334: it is there friends\n");
-            }
-            else {
-                printf("MPI_POLL 337: it is not there\n");
-                assert(false);
+            while (1){
+                ret = MPI_Iprobe(MPI_ANY_SOURCE,
+                MPI_ANY_TAG,
+                mpi_stream->comm,
+                &probe_flag,
+                &probeStatus);
+                
+                if (probe_flag){
+                    // //fprintf(stderr,"test-recieve 547: it is there friends\n");
+                    break;
+                }
+                else {
+                    // //fprintf(stderr,"test-recieve 551: it is not there\n");
+                    // assert(false);
+                }
             }
 
             r = mongoc_stream_readv (poll_list[i].stream, &iov, 1, 9, TIMEOUT);
@@ -570,10 +573,15 @@ retrieve_stream_polls(mongoc_stream_poll_t poll_list[4], int server_event[4]){
 static void
 print_row(int client_event[4]){
     for (int i = 0;i<4;i++){
-        printf("%zd",client_event[i]);
+        //fprintf(stderr,"%zd",client_event[i]);
     }
-    printf("\n");
+    //fprintf(stderr,"\n");
 }
+
+/* global declaration here */
+mongoc_stream_poll_t poll_list[4];
+int pollin_table[16][4];
+int permute_buf[4];
 
 static void*
 poll_test3_client(){  
@@ -594,7 +602,7 @@ poll_test3_client(){
 
         sleep(1);
 
-        // printf("\ndone sleeping\n");
+        // //fprintf(stderr,"\ndone sleeping\n");
 
         struct hostent *server;
         server = gethostbyname("Kenneths-MacBook-Pro.local");
@@ -606,7 +614,7 @@ poll_test3_client(){
         r = connect (conn_sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
         assert (r == 0);
 
-        // printf("client %zd : connected socket\n",i);
+        // //fprintf(stderr,"client %zd : connected socket\n",i);
 
         // comm join is blocking will connect when other side calls comm join
         r = MPI_Comm_join(conn_sock,&comm_list[i]);
@@ -618,13 +626,8 @@ poll_test3_client(){
         stream_list[i] = mongoc_stream_mpi_new (comm_list[i]);
     }
 
-    int pollin_table[16][4];
-    int permute_buf[4];
-
     r = generate_pollin_table_rec(pollin_table,permute_buf,4,4,0);
     assert(r == 16);
-
-    mongoc_stream_poll_t poll_list[4];
 
     for (int clientRow = 0;clientRow < 16; clientRow++){
 
@@ -633,9 +636,9 @@ poll_test3_client(){
             // find number of matching events between the rows
             int num_events = num_poll_events(pollin_table[clientRow],pollin_table[serverRow]);
 
-            printf("client row: ");
+            //fprintf(stderr,"client row: ");
             print_row(pollin_table[clientRow]);
-            printf("server row: ");
+            //fprintf(stderr,"server row: ");
             print_row(pollin_table[serverRow]);
 
             // make stream_poll struct based on client row
@@ -643,14 +646,14 @@ poll_test3_client(){
 
             r = mongoc_stream_poll(poll_list,4,TIMEOUT);
 
-            printf("num events: %zd r: %zd \n",num_events,r);
+            //fprintf(stderr,"num events: %zd r: %zd \n",num_events,r);
 
             assert(r == num_events);
 
             // retrieve all events that are found
             r = retrieve_stream_polls(poll_list,pollin_table[serverRow]);
 
-            printf("num events retrieved : %zd r: %zd \n",num_events,r);
+            //fprintf(stderr,"num events retrieved : %zd r: %zd \n",num_events,r);
             fflush(stdout);
 
         }
@@ -660,7 +663,7 @@ poll_test3_client(){
         mongoc_stream_destroy(stream_list[i]);
     }
 
-    printf("CLIENT: done");
+    fprintf(stderr,"CLIENT: done");
 
     return NULL;
 }
@@ -678,7 +681,7 @@ poll_send_server(void * argp){
     
     int (*pollin_table)[4] = args->pollin_table;
 
-    // free(args);
+    free(args);
 
     // comm join is blocking will connect when other side calls comm join
     MPI_Comm intercom;
@@ -689,7 +692,7 @@ poll_send_server(void * argp){
 
     stream = mongoc_stream_mpi_new(intercom);
 
-    // printf("Server %zd: Joined \n",count);
+    // //fprintf(stderr,"Server %zd: Joined \n",count);
 
     char buf[9] = "pingpong";
 
@@ -708,6 +711,8 @@ poll_send_server(void * argp){
             if (pollin_table[serverRow][count] == POLLIN){  
                 r = mongoc_stream_writev(stream,&iov,1,TIMEOUT);
                 assert(r == 9);
+
+                //fprintf(stderr,"SEND SERVER 715: we have sent out a msg\n");
             }
 
             char recv_buf[9] = {0};
@@ -721,7 +726,7 @@ poll_send_server(void * argp){
         }
     }
 
-    printf("SERVER: Done\n");
+    fprintf(stderr,"SERVER: Done\n");
 
     MPI_Comm_free(&intercom);
     return NULL;

@@ -316,7 +316,7 @@ _mongoc_stream_mpi_poll (mongoc_stream_poll_t *streams,
   // for each stream cast to a mpi stream and check their events for some timeout
   int i;
   ssize_t ret = -1;
-  mongoc_mpi_poll_t *mpi_ds = malloc(sizeof(mongoc_mpi_poll_t));
+  mongoc_mpi_poll_t *mpi_ds = malloc(sizeof(mongoc_mpi_poll_t)*nstreams);
 
   for (i=0; i < nstreams; i++){
       mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t *)streams[i].stream;
@@ -324,7 +324,7 @@ _mongoc_stream_mpi_poll (mongoc_stream_poll_t *streams,
     if (!mpi_stream->comm){
       // cleanup
       printf("ERROR: Poll mongoc-stream-mpi 327\n");
-      bson_free(mpi_ds);
+      free(mpi_ds);
       RETURN (ret);
     }
 
@@ -333,7 +333,7 @@ _mongoc_stream_mpi_poll (mongoc_stream_poll_t *streams,
     mpi_ds[i].revents = 0;
   }
 
-  // check the buffer for pollin events to flag reads for th revents
+  // check the buffer for pollin events to flag reads for the revents
 
   // call helper function that polls
 
