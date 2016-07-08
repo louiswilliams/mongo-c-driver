@@ -317,10 +317,9 @@ _mongoc_stream_mpi_poll (mongoc_stream_poll_t *streams,
   int i;
   ssize_t ret = -1;
   mongoc_mpi_poll_t *mpi_ds = malloc(sizeof(mongoc_mpi_poll_t));
-  mongoc_stream_mpi_t *mpi_stream;
 
   for (i=0; i < nstreams; i++){
-    mpi_stream = (mongoc_stream_mpi_t *)streams[i].stream;
+      mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t *)streams[i].stream;
 
     if (!mpi_stream->comm){
       // cleanup

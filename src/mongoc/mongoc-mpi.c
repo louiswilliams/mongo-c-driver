@@ -144,9 +144,6 @@ _mongoc_mpi_wait (MPI_Comm          comm,          /* IN */
               &probe_flag,
               &probeStatus);
 
-      if (probe_flag){
-        printf("there is a message\n");
-      }
       // mpi_sucess is just 0
       if (ret >= 0 && probe_flag) {
          /* there is a msg to recieve, */
@@ -238,12 +235,11 @@ mongoc_mpi_poll (mongoc_mpi_poll_t     *mpids,          /* IN */
       // i am assuming recieving normal and priority (POLLIN and POLLPRI) is the same in mpi
       int errors = 0;
 
-      if (mpids->events & (POLLIN|POLLPRI)) {
-        ret = _mongoc_mpi_wait(mpids->comm,0,&errors);
+      if (mpids[i].events & (POLLIN|POLLPRI)) {
+        ret = _mongoc_mpi_wait(mpids[i].comm,0,&errors);
         if (ret){
             mpids[i].revents |= (POLLIN & mpids->events);
             mpids[i].revents |= (POLLPRI & mpids->events);
-            printf("ERROR: we have found one\n");
         }
         else {
           printf("ERROR: mongoc-mpi 248 we have an error in waiting\n");
@@ -253,12 +249,12 @@ mongoc_mpi_poll (mongoc_mpi_poll_t     *mpids,          /* IN */
       }
 
       // a communicator send doesn't block so can always pollout
-      if (mpids->events & POLLOUT){
+      if (mpids[i].events & POLLOUT){
         mpids[i].revents |= POLLOUT;
       }
 
       // check if all events are satisfied
-      if (mpids->revents & mpids->events){
+      if (mpids[i].revents & mpids[i].events){
         num_events+= 1;
       }
     }

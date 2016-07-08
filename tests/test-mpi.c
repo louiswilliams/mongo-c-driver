@@ -590,50 +590,22 @@ poll_test3_client(){
 
     mongoc_stream_poll_t poll_list[4];
 
-    // for (int clientRow = 0;clientRow < 16; clientRow++){
-
-    //     // poll based on the table one row at a time
-    //     for (int serverRow = 0; serverRow < 16; serverRow++){
-    //         // find number of matching events between the rows
-    //         int num_events = num_poll_events(pollin_table[clientRow],pollin_table[serverRow]);
-
-    //         printf("client row: ");
-    //         print_row(pollin_table[clientRow]);
-    //         printf("server row: ");
-    //         print_row(pollin_table[serverRow]);
-
-    //         // make stream_poll struct based on client row
-    //         create_mongoc_stream_poll_t_list(stream_list,pollin_table[clientRow],poll_list);
-
-    //         mongoc_stream_poll_t* stream_poll = (mongoc_stream_poll_t*) poll_list;
-
-    //         r = mongoc_stream_poll(stream_poll,4,100);
-
-    //         printf("num events: %zd r: %zd \n",num_events,r);
-
-    //         assert(r == num_events);
-
-    //         // retrieve all events that are found
-    //         r = retrieve_stream_polls(poll_list);
-
-    //         assert(r == 0);
-    //     }
-    // }
-
-
     for (int clientRow = 0;clientRow < 16; clientRow++){
 
         // poll based on the table one row at a time
         for (int serverRow = 0; serverRow < 16; serverRow++){
             // find number of matching events between the rows
-            int num_events = num_poll_events([0,0,0,1],[0,0,0,1]);
+            int num_events = num_poll_events(pollin_table[clientRow],pollin_table[serverRow]);
+
+            printf("client row: ");
+            print_row(pollin_table[clientRow]);
+            printf("server row: ");
+            print_row(pollin_table[serverRow]);
 
             // make stream_poll struct based on client row
             create_mongoc_stream_poll_t_list(stream_list,pollin_table[clientRow],poll_list);
 
-            mongoc_stream_poll_t* stream_poll = (mongoc_stream_poll_t*) poll_list;
-
-            r = mongoc_stream_poll(stream_poll,4,100);
+            r = mongoc_stream_poll(poll_list,4,100);
 
             printf("num events: %zd r: %zd \n",num_events,r);
 
@@ -645,8 +617,6 @@ poll_test3_client(){
             assert(r == 0);
         }
     }
-
-
 
     for (int i = 0;i< 4;i++){
         // mongoc_stream_destroy(stream_list[i]);
