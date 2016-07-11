@@ -24,6 +24,10 @@ struct thread_args {
    int (*pollin_table)[4];
 };
 
+/* Test 1 - Single Message Send and Recieve
+ *
+ * The client will send ping and the server will respond with pong
+ */
 
 static void*
 sendv_test1_client(mongoc_stream_t* stream){
@@ -140,8 +144,11 @@ return NULL;
 
 
 /* Test 3 - Multiple Message - Single Read
-* Sending segmented messsages. All messages will be sent before the single recv
-* A single stream read reading through multiple segmented messages */
+ *
+ * Sending segmented messsages. All messages will be sent before the single recv
+ * A single stream read reading through multiple segmented messages 
+ */
+
 static void*
 sendv_test3_client(mongoc_stream_t* stream){
 
@@ -198,6 +205,12 @@ sendv_test3_server(mongoc_stream_t* stream){
 return NULL;
 }
 
+/* Test 4 - Multiple Random Size Segmented Message - Multiple Random Size Reads
+ *
+ * Segment the pingpong message randomly and send it out as multiple different sized
+ * message and the read will be of random size to reform the message.
+ * To mimick a stream interface.
+ */
 
 static void*
 sendv_test4_server(mongoc_stream_t* stream){
@@ -276,7 +289,12 @@ sendv_test4_client(mongoc_stream_t* stream){
 }
 
 
-/* basic test will check to see if for 1 connection it expires properly */
+/* Test 5 - Poll Test 1 Expiration
+ *
+ * Tests if the poll expires if no events occur.
+ *
+ */
+
 static void*
 poll_test1_client(mongoc_stream_t* stream){
 
@@ -315,7 +333,13 @@ return NULL;
 }
 
 
-/* basic test will check pollin on 1 connection */
+/* Test 6 - Poll Test 2 Single Connection pollin
+ *
+ * Tests if the pollin works for a single stream after there is something
+ * sent to it.
+ *
+ */
+
 static void*
 poll_test2_client(mongoc_stream_t* stream){
     mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
@@ -374,6 +398,18 @@ poll_test2_server(mongoc_stream_t* stream){
     MPI_Barrier(mpi_stream->comm);
     return NULL;
 }
+
+/* Test 7 - 4 Stream Permutation Test: Single Client Poller Connection to 4 Servers
+ *
+ * Create every permutation of pollin/NOP event for 4 connections and poll these four
+ * connections with there associated events on the client side. The server 4 connection
+ * will either SEND/NOP for each round based on the current iterations event on the server
+ * side. Since there are 16 permutations for POLLIN/NOP for 4 connections. And for each 
+ * permutation on the client side we send over all 16 configuration of events from the server
+ * to validate the proper number of events that are triggered in each round. There are a total of 
+ * 256 (16*16) round that are tested.
+ *
+ */
 
 
 /* Generate all permutations of a 0 and 1s for 4 ints. */
@@ -669,6 +705,10 @@ poll_test3_server(int listen_sock){
 }
 
 
+/* Main MPI Server that setups the socket listener that will spawn the MPI 
+ * connection stream then initiate the tests on the created MPI Stream.
+ */
+
 static void*
 mpi_test_server () 
 {
@@ -726,8 +766,11 @@ mpi_test_server ()
 }
 
 
-/* TODO create timeout for sendv and recv
-* Testing stream readv timeout after n seconds */
+/* Main MPI Client that connects to the socket server then creates
+ * a MPI connectionf from this TCP socket then calls client tests w
+ * ith the created MPI Stream.
+ */
+
 static void*
 mpi_test_client ()
 {
@@ -774,7 +817,10 @@ mpi_test_client ()
     return NULL;
 }
 
-
+/* MPI Test are two processes that run the same file, the exec call
+ * mpirun -np 2 ./<executable-name> is used to run 2 processes of
+ * this file creating a server and a client to test the stream functionality.
+ */
 static void
 test_mongoc_mpi_test (void)
 {
