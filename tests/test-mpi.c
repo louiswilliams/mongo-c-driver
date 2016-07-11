@@ -289,7 +289,6 @@ poll_test1_client(mongoc_stream_t* stream){
     poller.events = POLLIN;
     poller.revents = 0;
 
-    printf("before\n");
     // will test if it timeout for 2 seconds
     r = mongoc_stream_poll(&poller,1,500);
 
@@ -299,8 +298,6 @@ poll_test1_client(mongoc_stream_t* stream){
     r = mongoc_stream_poll(&poller,1,0);
 
     assert(r == 0);
-
-    printf("after\n");
 
     MPI_Barrier(mpi_stream->comm);
 
@@ -506,16 +503,9 @@ poll_test3_client(){
         conn_sock = socket(AF_INET, SOCK_STREAM, 0);
         assert (conn_sock);
 
-        sleep(1);
-
-        // printf("\ndone sleeping\n");
-
-        struct hostent *server;
-        server = gethostbyname("Kenneths-MacBook-Pro.local");
         server_addr.sin_family = AF_INET;
         server_addr.sin_port = htons(27020);
-
-        bcopy((char *)server->h_addr, (char *)&server_addr.sin_addr.s_addr,server->h_length);
+        server_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
         r = connect (conn_sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
         assert (r == 0);
@@ -572,7 +562,7 @@ poll_test3_client(){
 
 
 static void*
-poll_send_server(void * argp){
+poll_test3_send_server(void * argp){
     ssize_t r;
     mongoc_stream_t *stream;
 
@@ -666,7 +656,7 @@ poll_test3_server(int listen_sock){
             args->count = i;
             args->pollin_table = pollin_table;
 
-            r =  pthread_create(&(threads[i]), NULL, &(poll_send_server),args);
+            r =  pthread_create(&(threads[i]), NULL, &(poll_test3_send_server),args);
             assert (r == 0);
         }
     }
@@ -674,8 +664,6 @@ poll_test3_server(int listen_sock){
     for (int i =0;i< 4;i++){
         pthread_join(threads[i], NULL);
     }
-
-    close(listen_sock);
 
     return NULL;
 }
@@ -693,8 +681,8 @@ mpi_test_server ()
 
     struct sockaddr_in server_addr = { 0 };
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = htonl (INADDR_ANY);
-    server_addr.sin_port = htons (27020);
+    server_addr.sin_addr.s_addr = htonl (INADDR_LOOPBACK);
+    server_addr.sin_port = htons(27020);
 
     r = bind(listen_sock,(struct sockaddr *)&server_addr,sizeof server_addr);
     assert(r == 0);
@@ -728,13 +716,12 @@ mpi_test_server ()
 
     poll_test2_server(stream);
 
-    close(conn_sock);
-
-    mongoc_stream_destroy (stream);
-
     poll_test3_server(listen_sock);
 
     close(listen_sock);
+    close(conn_sock);
+    mongoc_stream_destroy (stream);
+
     return NULL;
 }
 
@@ -752,12 +739,9 @@ mpi_test_client ()
     conn_sock = socket(AF_INET, SOCK_STREAM, 0);
     assert (conn_sock);
 
-    struct hostent *server;
-    server = gethostbyname("Kenneths-MacBook-Pro.local");
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(27020);
-
-    bcopy((char *)server->h_addr, (char *)&server_addr.sin_addr.s_addr,server->h_length);
+    server_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
     r = connect (conn_sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
     assert (r == 0);
@@ -782,11 +766,10 @@ mpi_test_client ()
 
     poll_test2_client(stream);
 
-    mongoc_stream_destroy (stream);
-
     poll_test3_client();
 
     close(conn_sock);
+    mongoc_stream_destroy (stream);
 
     return NULL;
 }
