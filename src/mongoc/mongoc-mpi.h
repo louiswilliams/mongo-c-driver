@@ -66,7 +66,8 @@ ssize_t			     mongoc_mpi_poll 		       (mongoc_mpi_poll_t    *mpids,
 
 bool             mongoc_mpi_check_closed   (MPI_Comm             comm);
 
-
+int              mongoc_mpi_connect        (int                    sock,
+                                            MPI_Comm              *comm);
 
 
 BSON_END_DECLS

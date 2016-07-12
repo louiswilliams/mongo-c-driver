@@ -74,6 +74,7 @@ mongoc_client_connect_mpi (const mongoc_uri_t       *uri,
                            const mongoc_host_list_t *host,
                            bson_error_t             *error)
 {
+  printf("connect mpi is called\n");
   int r;
 
   int conn_sock;
@@ -146,7 +147,7 @@ mongoc_client_connect_mpi (const mongoc_uri_t       *uri,
     // use the socket to create a mpi communicator
     freeaddrinfo (result);
 
-    r = MPI_Comm_join(conn_sock,&comm);
+    r = mongoc_mpi_connect(conn_sock,&comm);
     return mongoc_stream_mpi_new (comm);
   }
 }

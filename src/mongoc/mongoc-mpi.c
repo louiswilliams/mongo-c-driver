@@ -40,10 +40,35 @@ get_expiration (int32_t timeout_msec)
    }
 }
 
+bool mongoc_mpi_initialize ()
+{
+    int isInitialized;
+    MPI_Initialized(&isInitialized);
+    if (!(isInitialized)) {
+        int provided;
+        MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
+        if (provided < MPI_THREAD_MULTIPLE) {
+            printf("ERROR: The MPI library does not have full thread support\n");
+            MPI_Abort(MPI_COMM_WORLD, 1);
+            return false;
+        }
+    }
+    return true;
+}
+
+int mongoc_mpi_connect  (int                    sock,
+                         MPI_Comm              *comm)
+{
+  mongoc_mpi_initialize();
+  return MPI_Comm_join(sock,comm);
+}
+
+
 ssize_t mongoc_mpi_recv (MPI_Comm      comm,
                          void         *buf,
                          size_t        buflen,
-                         int64_t       expire_at) {
+                         int64_t       expire_at)
+{
 
     ssize_t ret = 0;
 
@@ -101,8 +126,7 @@ ssize_t mongoc_mpi_sendv (MPI_Comm          comm,
                           size_t            iovcnt,
                           int64_t           expire_at) {
 
-    BSON_ASSERT (iovcnt > 0);    
-    BSON_ASSERT(expire_at); // Only the blocking version is implemented right now
+    BSON_ASSERT (iovcnt > 0);
 
     /* in the case when it's only 1 we don't need to malloc or memcpy runs faster */
     if (iovcnt == 1){

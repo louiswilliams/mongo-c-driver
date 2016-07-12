@@ -26,17 +26,16 @@ main (int   argc,
     */
    client = mongoc_client_new ("mongodb://localhost:27020");
 
-   printf("we are connecting\n");
+   printf("1. we are connecting\n");
 
    /*
     * Get a handle on the database "db_name" and collection "coll_name"
     */
    database = mongoc_client_get_database (client, "db_name");
 
-   printf("1. do we get here\n");
-
+   printf("2. database \n");
    collection = mongoc_client_get_collection (client, "db_name", "coll_name");
-
+   printf("3. collection \n");
    /*
     * Do work. This example pings the database, prints the result as JSON and
     * performs an insert
@@ -44,6 +43,8 @@ main (int   argc,
    command = BCON_NEW ("ping", BCON_INT32 (1));
 
    retval = mongoc_client_command_simple (client, "admin", command, NULL, &reply, &error);
+
+    printf("4. command simple \n");
 
    if (!retval) {
       fprintf (stderr, "%s\n", error.message);
@@ -58,6 +59,8 @@ main (int   argc,
    if (!mongoc_collection_insert (collection, MONGOC_INSERT_NONE, insert, NULL, &error)) {
       fprintf (stderr, "%s\n", error.message);
    }
+
+  printf("5. insert \n");
 
    bson_destroy (insert);
    bson_destroy (&reply);

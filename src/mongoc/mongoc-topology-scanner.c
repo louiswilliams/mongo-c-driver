@@ -30,6 +30,7 @@
 #include "utlist.h"
 #include "mongoc-topology-private.h"
 #include "mongoc-host-list-private.h"
+#include "mongoc-stream-mpi.h"
 
 #undef MONGOC_LOG_DOMAIN
 #define MONGOC_LOG_DOMAIN "topology_scanner"
@@ -300,6 +301,98 @@ mongoc_topology_scanner_ismaster_handler (mongoc_async_cmd_result_t async_status
 /*
  *--------------------------------------------------------------------------
  *
+ * mongoc_topology_scanner_node_connect_mpi --
+ *
+ *      Create a mpi communicator stream for this node.
+ *
+ * Returns:
+ *      A stream. On failure, return NULL and fill out the error.
+ *
+ *--------------------------------------------------------------------------
+ */
+static mongoc_stream_t *
+mongoc_topology_scanner_node_connect_mpi (mongoc_topology_scanner_node_t *node,
+                                          bson_error_t                   *error)
+{
+   MPI_Comm comm;
+   int conn_sock;
+   struct addrinfo hints;
+   struct addrinfo *rp;
+   char portstr [8];
+   mongoc_host_list_t *host;
+   int r;
+
+   ENTRY;
+
+   host = &node->host;
+
+   if (!node->dns_results) {
+      bson_snprintf (portstr, sizeof portstr, "%hu", host->port);
+
+      memset (&hints, 0, sizeof hints);
+      hints.ai_family = host->family;
+      hints.ai_socktype = SOCK_STREAM;
+      hints.ai_flags = 0;
+      hints.ai_protocol = 0;
+
+      r = getaddrinfo (host->host, portstr, &hints, &node->dns_results);
+
+      if (r != 0) {
+         mongoc_counter_dns_failure_inc ();
+         bson_set_error (error,
+                         MONGOC_ERROR_STREAM,
+                         MONGOC_ERROR_STREAM_NAME_RESOLUTION,
+                         "Failed to resolve '%s'",
+                         host->host);
+         RETURN (NULL);
+      }
+
+      node->current_dns_result = node->dns_results;
+
+      mongoc_counter_dns_success_inc ();
+   }
+
+   for (; node->current_dns_result;
+        node->current_dns_result = node->current_dns_result->ai_next) {
+      rp = node->current_dns_result;
+
+      /*
+       * Create a new non-blocking socket.
+       */
+       conn_sock = socket(rp->ai_family,rp->ai_socktype,rp->ai_protocol);
+       if (conn_sock < 0) {
+           continue;
+       }
+
+    /*
+     * Try to connect to the peer.
+     */
+    r = connect(conn_sock,rp->ai_addr,(socklen_t)rp->ai_addrlen);
+
+    if (r >= 0){
+      break;
+    } else {
+      close (conn_sock);
+      continue;
+    }
+   }
+
+   if (!conn_sock) {
+      freeaddrinfo (node->dns_results);
+      node->dns_results = NULL;
+      node->current_dns_result = NULL;
+      RETURN (NULL);
+   } 
+
+   r = mongoc_mpi_connect(conn_sock,&comm);
+
+   return mongoc_stream_mpi_new (comm);
+}
+
+
+/*
+ *--------------------------------------------------------------------------
+ *
  * mongoc_topology_scanner_node_connect_tcp --
  *
  *      Create a socket stream for this node, begin a non-blocking
@@ -476,7 +569,9 @@ mongoc_topology_scanner_node_setup (mongoc_topology_scanner_node_t *node,
       if (node->host.family == AF_UNIX) {
          sock_stream = mongoc_topology_scanner_node_connect_unix (node, error);
       } else {
-         sock_stream = mongoc_topology_scanner_node_connect_tcp (node, error);
+         // TODO WE WOULD ADD IT HERE
+         // sock_stream = mongoc_topology_scanner_node_connect_tcp (node, error);
+        sock_stream = mongoc_topology_scanner_node_connect_mpi(node, error);
       }
 
 #ifdef MONGOC_ENABLE_SSL
