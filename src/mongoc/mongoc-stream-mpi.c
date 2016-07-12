@@ -61,6 +61,7 @@ get_expiration (int32_t timeout_msec)
 
 static void
 _mongoc_stream_mpi_free_buffer(mongoc_stream_mpi_t *mpi_stream){
+  mongoc_mpi_initialize ();
   mpi_stream->cur_ptr = 0;
   mpi_stream->buff_len = 0;
   free(mpi_stream->buffer);
@@ -72,6 +73,7 @@ _mongoc_stream_mpi_free_buffer(mongoc_stream_mpi_t *mpi_stream){
 static int
 _mongoc_stream_mpi_close (mongoc_stream_t *stream)
 {
+   mongoc_mpi_initialize ();
    RETURN (0);
 }
 
@@ -80,6 +82,7 @@ static void
 _mongoc_stream_mpi_destroy (mongoc_stream_t *stream)
 {
    ENTRY;
+   mongoc_mpi_initialize ();
    mongoc_stream_mpi_t *mpi_stream = (mongoc_stream_mpi_t *)stream;
    int ret;
 
@@ -105,7 +108,7 @@ static void
 _mongoc_stream_mpi_failed (mongoc_stream_t *stream)
 {
    ENTRY;
-
+   mongoc_mpi_initialize ();
    _mongoc_stream_mpi_destroy (stream);
 
    EXIT;
@@ -119,6 +122,7 @@ _mongoc_stream_mpi_setsockopt (mongoc_stream_t *stream,
                                   void            *optval,
                                   socklen_t        optlen)
 {
+  mongoc_mpi_initialize ();
   RETURN(0);
 }
 
@@ -127,6 +131,7 @@ _mongoc_stream_mpi_setsockopt (mongoc_stream_t *stream,
 static int
 _mongoc_stream_mpi_flush (mongoc_stream_t *stream)
 {
+  mongoc_mpi_initialize ();
   RETURN(0);
 }
 
@@ -261,6 +266,7 @@ _mongoc_stream_mpi_readv (mongoc_stream_t *stream,
                              size_t           min_bytes,
                              int32_t          timeout_msec)
 {
+  mongoc_mpi_initialize ();
   mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
   int64_t expire_at;
   ssize_t nread = 0;
@@ -313,6 +319,7 @@ _mongoc_stream_mpi_writev (mongoc_stream_t *stream,
                               size_t           iovcnt,
                               int32_t          timeout_msec)
 {
+  mongoc_mpi_initialize ();
   mongoc_stream_mpi_t *mpi_stream = (mongoc_stream_mpi_t *)stream;
 
   BSON_ASSERT (iovcnt > 0);
@@ -328,7 +335,7 @@ _mongoc_stream_mpi_poll (mongoc_stream_poll_t *streams,
 
 {
 
-
+  mongoc_mpi_initialize ();
   // for each stream cast to a mpi stream and check their events for some timeout
   int i;
   ssize_t ret = -1;
@@ -394,7 +401,7 @@ _mongoc_stream_mpi_check_closed (mongoc_stream_t *stream) /* IN */
  *       None.
  *
  * Side effects:
- *       None.
+ *       Initializes the mpi environment
  *
  *--------------------------------------------------------------------------
  */
@@ -402,6 +409,7 @@ _mongoc_stream_mpi_check_closed (mongoc_stream_t *stream) /* IN */
 mongoc_stream_t *
 mongoc_stream_mpi_new (MPI_Comm comm) /* IN */
 {
+   mongoc_mpi_initialize ();
    mongoc_stream_mpi_t *stream;
 
    stream = (mongoc_stream_mpi_t *)bson_malloc0 (sizeof *stream);

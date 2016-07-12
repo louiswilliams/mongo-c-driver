@@ -29,6 +29,7 @@
 #endif
 #include "mongoc-thread-private.h"
 #include "mongoc-trace.h"
+#include "mongoc-mpi.h"
 
 
 #ifndef MONGOC_NO_AUTOMATIC_GLOBALS
@@ -128,6 +129,7 @@ mongoc_init (void)
 {
    static mongoc_once_t once = MONGOC_ONCE_INIT;
    mongoc_once (&once, _mongoc_do_init);
+   mongoc_mpi_initialize();
 }
 
 static MONGOC_ONCE_FUN( _mongoc_do_cleanup)
@@ -159,6 +161,9 @@ mongoc_cleanup (void)
 {
    static mongoc_once_t once = MONGOC_ONCE_INIT;
    mongoc_once (&once, _mongoc_do_cleanup);
+
+   // TODO MPI
+   mongoc_mpi_finalize();
 }
 
 /*

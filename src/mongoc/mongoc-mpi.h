@@ -39,6 +39,7 @@
 #endif
 
 #include "mongoc-iovec.h"
+#include <mpi.h>
 
 
 BSON_BEGIN_DECLS
@@ -68,6 +69,10 @@ bool             mongoc_mpi_check_closed   (MPI_Comm             comm);
 
 int              mongoc_mpi_connect        (int                    sock,
                                             MPI_Comm              *comm);
+
+bool             mongoc_mpi_initialize     ();
+
+void             mongoc_mpi_finalize       ();
 
 
 BSON_END_DECLS

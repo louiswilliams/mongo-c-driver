@@ -17,7 +17,6 @@
 
 
 #include <errno.h>
-#include <mpi.h>
 #include <string.h>
 
 #include "mongoc-counters-private.h"
@@ -56,6 +55,14 @@ bool mongoc_mpi_initialize ()
     return true;
 }
 
+void mongoc_mpi_finalize() {
+    int isFinalized;
+    MPI_Finalized(&isFinalized);
+    if (!isFinalized) {
+        MPI_Finalize();
+    }
+}
+
 int mongoc_mpi_connect  (int                    sock,
                          MPI_Comm              *comm)
 {
@@ -75,7 +82,8 @@ ssize_t mongoc_mpi_recv (MPI_Comm      comm,
     BSON_ASSERT(comm);
     BSON_ASSERT(buf);
     BSON_ASSERT(buflen);
-    BSON_ASSERT(expire_at); // Only the blocking version is implemented right now
+
+    mongoc_mpi_initialize ();
 
     int probe_flag;
     MPI_Status probeStatus;
@@ -128,6 +136,8 @@ ssize_t mongoc_mpi_sendv (MPI_Comm          comm,
 
     BSON_ASSERT (iovcnt > 0);
 
+    mongoc_mpi_initialize ();
+
     /* in the case when it's only 1 we don't need to malloc or memcpy runs faster */
     if (iovcnt == 1){
         int r = MPI_Send(iov[0].iov_base, iov[0].iov_len,MPI_CHAR,0,0,comm);
@@ -175,6 +185,8 @@ _mongoc_mpi_wait (MPI_Comm          comm,          /* IN */
 
    ENTRY;
 
+   mongoc_mpi_initialize ();
+
    now = bson_get_monotonic_time();
    expire_at = get_expiration(timeout);
 
@@ -214,6 +226,8 @@ mongoc_mpi_check_closed (MPI_Comm comm) /* IN */
    int local_size;
    int is_intercom;
    MPI_Status probeStatus;
+
+   mongoc_mpi_initialize ();
 
    ret = MPI_Comm_test_inter(comm, &is_intercom);
    if (ret != MPI_SUCCESS){
@@ -268,7 +282,7 @@ mongoc_mpi_poll (mongoc_mpi_poll_t     *mpids,          /* IN */
                  size_t                n_mpids,         /* IN */
                  int32_t               timeout_msec)         /* IN */
 {
-
+   mongoc_mpi_initialize ();
    int ret = 0;
    int i;
 
