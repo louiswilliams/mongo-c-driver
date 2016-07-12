@@ -40,6 +40,7 @@
 #include "mongoc-util-private.h"
 #include "mongoc-set-private.h"
 #include "mongoc-log.h"
+#include "mongoc-stream-mpi.h"
 
 #ifdef MONGOC_ENABLE_SSL
 #include "mongoc-stream-tls.h"
@@ -67,6 +68,88 @@ _mongoc_client_killcursors_command (mongoc_cluster_t       *cluster,
                                     const char             *collection);
 
 
+/* there is no connection time out since we are using a blocking connect */
+static mongoc_stream_t *
+mongoc_client_connect_mpi (const mongoc_uri_t       *uri,
+                           const mongoc_host_list_t *host,
+                           bson_error_t             *error)
+{
+  int r;
+
+  int conn_sock;
+
+  MPI_Comm comm;
+
+  struct addrinfo hints;
+  struct addrinfo *result, *rp;
+  char portstr [8];
+
+  mongoc_stream_t *stream;
+
+  BSON_ASSERT (uri);
+  BSON_ASSERT (host);
+
+  memset (&hints, 0, sizeof hints);
+  hints.ai_family = host->family;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = 0;
+  hints.ai_protocol = 0;
+
+  r = getaddrinfo (host->host, portstr, &hints, &result);
+
+  if (r != 0) {
+    mongoc_counter_dns_failure_inc ();
+    bson_set_error(error,
+                   MONGOC_ERROR_STREAM,
+                   MONGOC_ERROR_STREAM_NAME_RESOLUTION,
+                   "Failed to resolve %s",
+                   host->host);
+    RETURN (NULL);
+  }
+
+  mongoc_counter_dns_success_inc ();
+
+  for (rp = result; rp; rp = rp->ai_next) {
+    /*
+     * Create a normal blocking socket
+     */
+    conn_sock = socket(rp->ai_family,rp->ai_socktype,rp->ai_protocol);
+    if (conn_sock < 0) {
+       continue;
+    }
+
+    /*
+     * Try to connect to the peer.
+     */
+    r = connect(conn_sock,rp->ai_addr,(socklen_t)rp->ai_addrlen);
+
+    // if successful there is a socket now so you break out
+    if (r >= 0){
+      break;
+    } else {
+
+       close(conn_sock);
+       continue;
+    }
+  }
+
+
+  if (!conn_sock) {
+    bson_set_error (error,
+                    MONGOC_ERROR_STREAM,
+                    MONGOC_ERROR_STREAM_CONNECT,
+                    "Failed to connect to target host: %s",
+                    host->host_and_port);
+    freeaddrinfo (result);
+    RETURN (NULL);
+  } else {
+    // use the socket to create a mpi communicator
+    freeaddrinfo (result);
+
+    r = MPI_Comm_join(conn_sock,&comm);
+    return mongoc_stream_mpi_new (comm);
+  }
+}
 
 /*
  *--------------------------------------------------------------------------
@@ -312,9 +395,12 @@ mongoc_client_default_stream_initiator (const mongoc_uri_t       *uri,
    case AF_INET6:
 #endif
    case AF_INET:
-      base_stream = mongoc_client_connect_tcp (uri, host, error);
+      // base_stream = mongoc_client_connect_tcp (uri, host, error);
+      printf("we are making the mpi stream\n");
+      base_stream = mongoc_client_connect_mpi(uri, host, error);
       break;
    case AF_UNIX:
+      printf("we are making the unix stream\n");
       base_stream = mongoc_client_connect_unix (uri, host, error);
       break;
    default:

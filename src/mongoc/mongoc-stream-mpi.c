@@ -192,6 +192,7 @@ _mongoc_stream_mpi_probe_read (mongoc_stream_mpi_t* mpi_stream,
           if (probe_flag){
             break;
           }
+          // expire_at -1 means to wait indefinitely
           else if (now > expire_at && expire_at > 0){
             return -1;
           }
