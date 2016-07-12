@@ -489,7 +489,7 @@ retrieve_stream_polls(mongoc_stream_poll_t poll_list[4], int server_event[4]){
         iov.iov_len = sizeof (buf);
 
         if (poll_list[i].revents == POLLIN){
-            r = mongoc_stream_readv (poll_list[i].stream, &iov, 1, 9, TIMEOUT);
+            r = mongoc_stream_readv (poll_list[i].stream, &iov, 1, 9, -1);
 
             assert((server_event[i] & POLLIN) == POLLIN);
             assert((poll_list[i].events & POLLIN) == POLLIN);
@@ -507,7 +507,7 @@ retrieve_stream_polls(mongoc_stream_poll_t poll_list[4], int server_event[4]){
 
             mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t *)poll_list[i].stream;
 
-            r = mongoc_stream_readv (poll_list[i].stream, &iov, 1, 9, TIMEOUT);
+            r = mongoc_stream_readv (poll_list[i].stream, &iov, 1, 9, -1);
             assert(r == 9);
             assert (memcmp (buf,cmpbuf,9) == 0);
         }
@@ -664,7 +664,7 @@ poll_test3_send_server(void * argp){
             iov.iov_len = sizeof (recv_buf);
             
             // wait on a recv to block and to garunteed sends aren't queued on the network buffer
-            r = mongoc_stream_readv (stream, &iov, 1,iov.iov_len,TIMEOUT);
+            r = mongoc_stream_readv (stream, &iov, 1,iov.iov_len,-1);
             assert(r == 9);
             assert (memcmp (buf,recv_buf,9) == 0);
         }

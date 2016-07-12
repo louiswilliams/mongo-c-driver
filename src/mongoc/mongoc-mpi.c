@@ -67,7 +67,8 @@ ssize_t mongoc_mpi_recv (MPI_Comm      comm,
       if (probe_flag){
         break;
       }
-      else if (now > expire_at){
+      // expire_at -1 means to wait indefinitely
+      else if (now > expire_at && expire_at > 0){
         return -1;
       }
       else {
