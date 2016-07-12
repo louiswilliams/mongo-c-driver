@@ -31,6 +31,10 @@ struct thread_args {
 
 static void*
 sendv_test1_client(mongoc_stream_t* stream){
+
+    mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
+    MPI_Barrier(mpi_stream->comm);
+
     char buf[5];
     ssize_t r;
     bool closed;
@@ -50,9 +54,15 @@ sendv_test1_client(mongoc_stream_t* stream){
     closed = mongoc_stream_check_closed (stream);
     assert (closed == false);
 
-    r = mongoc_stream_readv (stream, &iov, 1, 5, 2);
+    r = mongoc_stream_readv (stream, &iov, 1, 5, TIMEOUT);
     assert (r == 5);
     assert (strcmp (buf, "pong") == 0);
+
+    r = mongoc_stream_readv (stream, &iov, 1, 5, TIMEOUT);
+    assert(r == -1);
+
+    MPI_Barrier(mpi_stream->comm);
+
     return NULL;
 };
 
@@ -60,6 +70,9 @@ sendv_test1_client(mongoc_stream_t* stream){
 static void*
 sendv_test1_server(mongoc_stream_t* stream){
    
+    mongoc_stream_mpi_t* mpi_stream = (mongoc_stream_mpi_t*) stream;
+    MPI_Barrier(mpi_stream->comm);
+
     mongoc_iovec_t iov;
     ssize_t r;
     char buf[5];
@@ -75,6 +88,9 @@ sendv_test1_server(mongoc_stream_t* stream){
 
     r = mongoc_stream_writev (stream, &iov, 1, TIMEOUT);
     assert (r == 5);
+
+    MPI_Barrier(mpi_stream->comm);
+
     return NULL;
 }
 

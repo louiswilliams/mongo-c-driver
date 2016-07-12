@@ -52,12 +52,28 @@ ssize_t mongoc_mpi_recv (MPI_Comm      comm,
     BSON_ASSERT(buflen);
     BSON_ASSERT(expire_at); // Only the blocking version is implemented right now
 
+    int probe_flag;
     MPI_Status probeStatus;
 
-    MPI_Probe(MPI_ANY_SOURCE,
-              MPI_ANY_TAG,
-              comm,
-              &probeStatus);
+    int64_t now = bson_get_monotonic_time();
+
+    for (;;){
+      MPI_Iprobe(MPI_ANY_SOURCE,
+                MPI_ANY_TAG,
+                comm,
+                &probe_flag,
+                &probeStatus);
+
+      if (probe_flag){
+        break;
+      }
+      else if (now > expire_at){
+        return -1;
+      }
+      else {
+        now = bson_get_monotonic_time();
+      }
+    }
 
     int msgLen;
     MPI_Get_count(&probeStatus, MPI_CHAR, &msgLen);

@@ -150,6 +150,7 @@ _mongoc_stream_mpi_probe_read (mongoc_stream_mpi_t* mpi_stream,
 {
   int probe_flag;
   int ret;
+  int64_t now;
   MPI_Status probeStatus;
 
     
@@ -180,10 +181,28 @@ _mongoc_stream_mpi_probe_read (mongoc_stream_mpi_t* mpi_stream,
       // otherwise it will probe (blocking recv) since it hasn't recieved any bytes yet
       // TODO to implement timeout you would while loop here until the timeout time
       else {
-            ret = MPI_Probe(MPI_ANY_SOURCE,
-                      MPI_ANY_TAG,
-                      mpi_stream->comm,
-                      &probeStatus);
+            // ret = MPI_Probe(MPI_ANY_SOURCE,
+            //           MPI_ANY_TAG,
+            //           mpi_stream->comm,
+            //           &probeStatus);
+        now = bson_get_monotonic_time();
+        for (;;){
+          MPI_Iprobe(MPI_ANY_SOURCE,
+                    MPI_ANY_TAG,
+                    mpi_stream->comm,
+                    &probe_flag,
+                    &probeStatus);
+
+          if (probe_flag){
+            break;
+          }
+          else if (now > expire_at){
+            return -1;
+          }
+          else {
+            now = bson_get_monotonic_time();
+          }
+        }
       }
 
       // 3rd step if we are here there is a msg to read
