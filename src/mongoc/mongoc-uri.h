@@ -102,6 +102,9 @@ const mongoc_read_concern_t  *mongoc_uri_get_read_concern         (const mongoc_
 void                          mongoc_uri_set_read_concern         (mongoc_uri_t                 *uri,
                                                                    const mongoc_read_concern_t  *rc);
 
+bool                          mongoc_uri_get_mpi                  (const mongoc_uri_t           *uri);
+
+
 BSON_END_DECLS
 
 

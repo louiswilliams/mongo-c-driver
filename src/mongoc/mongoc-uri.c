@@ -552,6 +552,7 @@ mongoc_uri_option_is_int32 (const char *key)
        !strcasecmp(key, "wtimeoutms");
 }
 
+// TODO MPI
 bool
 mongoc_uri_option_is_bool (const char *key)
 {
@@ -560,7 +561,8 @@ mongoc_uri_option_is_bool (const char *key)
               !strcasecmp(key, "safe") ||
               !strcasecmp(key, "serverSelectionTryOnce") ||
               !strcasecmp(key, "slaveok") ||
-              !strcasecmp(key, "ssl");
+              !strcasecmp(key, "ssl")||
+              !strcasecmp(key, "mpi");
 }
 
 bool
@@ -1327,6 +1329,18 @@ mongoc_uri_get_ssl (const mongoc_uri_t *uri) /* IN */
    BSON_ASSERT (uri);
 
    return (bson_iter_init_find_case (&iter, &uri->options, "ssl") &&
+           BSON_ITER_HOLDS_BOOL (&iter) &&
+           bson_iter_bool (&iter));
+}
+
+// TODO getter for mpi in the uri
+bool
+mongoc_uri_get_mpi (const mongoc_uri_t *uri){
+   bson_iter_t iter;
+
+   BSON_ASSERT (uri);
+
+   return (bson_iter_init_find_case (&iter, &uri->options, "mpi") &&
            BSON_ITER_HOLDS_BOOL (&iter) &&
            bson_iter_bool (&iter));
 }

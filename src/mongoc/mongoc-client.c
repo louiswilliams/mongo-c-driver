@@ -396,9 +396,15 @@ mongoc_client_default_stream_initiator (const mongoc_uri_t       *uri,
    case AF_INET6:
 #endif
    case AF_INET:
-      // base_stream = mongoc_client_connect_tcp (uri, host, error);
-      printf("we are making the mpi stream\n");
-      base_stream = mongoc_client_connect_mpi(uri, host, error);
+      // TODO if use mpi is in the uri we use it otherwise connect through tcp
+      if (client->use_mpi) {
+        printf("we are making mpi\n");
+        base_stream = mongoc_client_connect_mpi(uri, host, error);
+      }
+      else {
+        printf("we are making tcp\n");
+        base_stream = mongoc_client_connect_tcp (uri, host, error);
+      }
       break;
    case AF_UNIX:
       printf("we are making the unix stream\n");
@@ -721,6 +727,13 @@ mongoc_client_new(const char *uri_string)
    return client;
 }
 
+// TODO mpi not sure what other options we would potentially have
+void
+mongoc_client_set_mpi_opts (mongoc_client_t *client)
+{
+  BSON_ASSERT (client);
+  client->use_mpi = true;
+}
 
 /*
  *--------------------------------------------------------------------------
@@ -839,9 +852,18 @@ _mongoc_client_new_from_uri (const mongoc_uri_t *uri, mongoc_topology_t *topolog
 
    mongoc_cluster_init (&client->cluster, client->uri, client);
 
+   // TODO set mpi boolean field in client based on the uri
+   client->use_mpi = false;
+   if (mongoc_uri_get_mpi(client->uri)) {
+
+      // TODO set the mpi options in the client if it is flagged on in the uri
+      mongoc_client_set_mpi_opts (client);
+   }
+
 #ifdef MONGOC_ENABLE_SSL
    client->use_ssl = false;
    if (mongoc_uri_get_ssl (client->uri)) {
+
       /* sets use_ssl = true */
       mongoc_client_set_ssl_opts (client, mongoc_ssl_opt_get_default ());
    }

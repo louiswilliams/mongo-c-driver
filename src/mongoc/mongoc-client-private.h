@@ -88,6 +88,9 @@ struct _mongoc_client_t
 
    int32_t                    error_api_version;
    bool                       error_api_set;
+
+   // TODO mpi
+   bool                       use_mpi;
 };
 
 
