@@ -370,6 +370,7 @@ mongoc_client_default_stream_initiator (const mongoc_uri_t       *uri,
                                         void                     *user_data,
                                         bson_error_t             *error)
 {
+  printf("we are in the default stream initiator\n");
    mongoc_stream_t *base_stream = NULL;
 #ifdef MONGOC_ENABLE_SSL
    mongoc_client_t *client = (mongoc_client_t *)user_data;
@@ -398,11 +399,11 @@ mongoc_client_default_stream_initiator (const mongoc_uri_t       *uri,
    case AF_INET:
       // TODO if use mpi is in the uri we use it otherwise connect through tcp
       if (client->use_mpi) {
-        printf("we are making mpi\n");
+        printf("using mpi stream\n");
         base_stream = mongoc_client_connect_mpi(uri, host, error);
       }
       else {
-        printf("we are making tcp\n");
+        printf("using tcp stream\n");
         base_stream = mongoc_client_connect_tcp (uri, host, error);
       }
       break;
@@ -733,6 +734,10 @@ mongoc_client_set_mpi_opts (mongoc_client_t *client)
 {
   BSON_ASSERT (client);
   client->use_mpi = true;
+
+  if (client->topology->single_threaded) {
+    mongoc_topology_scanner_set_mpi (client->topology->scanner);
+  }
 }
 
 /*

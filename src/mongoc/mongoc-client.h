@@ -175,6 +175,8 @@ mongoc_server_description_t   *mongoc_client_select_server                 (mong
                                                                             bson_error_t                 *error);
 bool                           mongoc_client_set_error_api                 (mongoc_client_t              *client,
                                                                             int32_t                       version);
+
+void                           mongoc_client_set_mpi_opts                  (mongoc_client_t              *client);
 BSON_END_DECLS
 
 

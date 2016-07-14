@@ -81,6 +81,8 @@ typedef struct mongoc_topology_scanner
 #ifdef MONGOC_ENABLE_SSL
    mongoc_ssl_opt_t *ssl_opts;
 #endif
+   bool                           use_mpi;
+
 } mongoc_topology_scanner_t;
 
 mongoc_topology_scanner_t *
@@ -151,6 +153,9 @@ void
 mongoc_topology_scanner_set_ssl_opts (mongoc_topology_scanner_t *ts,
                                       mongoc_ssl_opt_t          *opts);
 #endif
+
+void
+mongoc_topology_scanner_set_mpi (mongoc_topology_scanner_t *ts);
 
 BSON_END_DECLS
 

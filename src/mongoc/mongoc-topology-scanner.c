@@ -60,6 +60,11 @@ mongoc_topology_scanner_new (const mongoc_uri_t          *uri,
    return ts;
 }
 
+void
+mongoc_topology_scanner_set_mpi      (mongoc_topology_scanner_t *ts){
+  ts->use_mpi = true;
+}
+
 #ifdef MONGOC_ENABLE_SSL
 void
 mongoc_topology_scanner_set_ssl_opts (mongoc_topology_scanner_t *ts,
@@ -570,8 +575,11 @@ mongoc_topology_scanner_node_setup (mongoc_topology_scanner_node_t *node,
          sock_stream = mongoc_topology_scanner_node_connect_unix (node, error);
       } else {
          // TODO WE WOULD ADD IT HERE
-         // sock_stream = mongoc_topology_scanner_node_connect_tcp (node, error);
-        sock_stream = mongoc_topology_scanner_node_connect_mpi(node, error);
+        if (node->ts->use_mpi){
+          sock_stream = mongoc_topology_scanner_node_connect_mpi(node, error);
+        } else {
+          sock_stream = mongoc_topology_scanner_node_connect_tcp (node, error);
+        }
       }
 
 #ifdef MONGOC_ENABLE_SSL

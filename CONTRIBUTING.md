@@ -172,6 +172,11 @@ If you start `mongod` with SSL, set these variables to configure how
 * `MONGOC_TEST_SSL_WEAK_CERT_VALIDATION`: set to `on` to relax the client's
   validation of the server's certificate.
 
+If you start mongod to connect through mpi set these varibles to configure
+how 'make test' connects to it
+
+* 'MONGOC_TEST_MPI' set to 'on' to connect to the server with mpi
+
 The SASL / GSSAPI / Kerberos tests are skipped by default. To run them, set up a
 separate `mongod` with Kerberos and set its host and Kerberos principal name
 as environment variables:

@@ -722,6 +722,28 @@ test_framework_get_ssl (void)
    return test_framework_getenv_bool ("MONGOC_TEST_SSL");
 }
 
+/* TODO
+ *--------------------------------------------------------------------------
+ *
+ * test_framework_get_mpi --
+ *
+ *       Should we connect to the test MongoDB server over mpi
+ *
+ * Returns:
+ *       True if MONGOC_TEST_MPI environment variables are set.
+ *
+ * Side effects:
+ *       None.
+ *
+ *--------------------------------------------------------------------------
+ */
+bool
+test_framework_get_mpi (void)
+{
+   return test_framework_getenv_bool ("MONGOC_TEST_MPI");
+}
+
+
 
 /*
  *--------------------------------------------------------------------------
@@ -1138,6 +1160,31 @@ test_framework_set_ssl_opts (mongoc_client_t *client)
    }
 }
 
+/* TODO
+ *--------------------------------------------------------------------------
+ *
+ * test_framework_set_mpi_opts --
+ *
+ *       Configure a client to connect to the test MongoDB server over mpi.
+ *
+ * Returns:
+ *       None.
+ *
+ * Side effects:
+ *       None.
+ *
+ *--------------------------------------------------------------------------
+ */
+void
+test_framework_set_mpi_opts (mongoc_client_t *client)
+{
+   assert (client);
+
+   if (test_framework_get_mpi ()) {
+      mongoc_client_set_mpi_opts (client);
+   }
+}
+
 
 /*
  *--------------------------------------------------------------------------
@@ -1157,11 +1204,14 @@ test_framework_set_ssl_opts (mongoc_client_t *client)
 mongoc_client_t *
 test_framework_client_new ()
 {
+   printf("1207 test-libmongo.c is it here\n");
    char *test_uri_str = test_framework_get_uri_str ();
    mongoc_client_t *client = mongoc_client_new (test_uri_str);
 
    assert (client);
    test_framework_set_ssl_opts (client);
+
+   test_framework_set_mpi_opts (client);
 
    bson_free (test_uri_str);
 
